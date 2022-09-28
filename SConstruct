@@ -2,118 +2,148 @@ import os, sys
 from os.path import join as joinpath
 
 useIcc = False
-#useIcc = True
+# useIcc = True
 
 TRACE = True
 
+
 def buildSim(cppFlags, dir, type, pgo=None):
-    ''' Build the simulator with a specific base buid dir and config type'''
+    """Build the simulator with a specific base buid dir and config type"""
 
     buildDir = joinpath(dir, type)
-    print "Building " + type + " zsim at " + buildDir
+    print("Building " + type + " zsim at " + buildDir)
 
-    env = Environment(ENV = os.environ, tools = ['default', 'textfile'])
+    env = Environment(ENV=os.environ, tools=["default", "textfile"])
     env["CPPFLAGS"] = cppFlags
 
-    allSrcs = [f for dir, subdirs, files in os.walk("src") for f in Glob(dir + "/*")]
+    allSrcs = [
+        f for dir, subdirs, files in os.walk("src") for f in Glob(dir + "/*")
+    ]
     versionFile = joinpath(buildDir, "version.h")
     if os.path.exists(".git"):
-        env.Command(versionFile, allSrcs + [".git/index", "SConstruct"],
-            'printf "#define ZSIM_BUILDDATE \\"`date`\\"\\n#define ZSIM_BUILDVERSION \\"`python misc/gitver.py`\\"" >>' + versionFile)
+        env.Command(
+            versionFile,
+            allSrcs + [".git/index", "SConstruct"],
+            'printf "#define ZSIM_BUILDDATE \\"`date`\\"\\n#define ZSIM_BUILDVERSION \\"`python misc/gitver.py`\\"" >>'
+            + versionFile,
+        )
     else:
-        env.Command(versionFile, allSrcs + ["SConstruct"],
-            'printf "#define ZSIM_BUILDDATE \\"`date`\\"\\n#define ZSIM_BUILDVERSION \\"no git repo\\"" >>' + versionFile)
+        env.Command(
+            versionFile,
+            allSrcs + ["SConstruct"],
+            'printf "#define ZSIM_BUILDDATE \\"`date`\\"\\n#define ZSIM_BUILDVERSION \\"no git repo\\"" >>'
+            + versionFile,
+        )
 
     # Parallel builds?
-    #env.SetOption('num_jobs', 32)
+    # env.SetOption('num_jobs', 32)
 
     # Use link-time optimization? It's still a bit buggy, so be careful
-    #env['CXX'] = 'g++ -flto -flto-report -fuse-linker-plugin'
-    #env['CC'] = 'gcc -flto'
-    env['CC'] = 'gcc7'
-    env['CXX'] = 'g++-7'
-    #env["LINKFLAGS"] = " -O3 -finline "
+    # env['CXX'] = 'g++ -flto -flto-report -fuse-linker-plugin'
+    # env['CC'] = 'gcc -flto'
+    env["CC"] = "gcc-10"
+    env["CXX"] = "g++-10"
+    # env["LINKFLAGS"] = " -O3 -finline "
     if useIcc:
-        env['CC'] = 'icc'
-        env['CXX'] = 'icpc -ipo'
+        env["CC"] = "icc"
+        env["CXX"] = "icpc -ipo"
 
     # Required paths
     if "XEDPATH" in os.environ:
         XEDPATH = os.environ["XEDPATH"]
     else:
-       print "ERROR: You need to define the $XEDPATH environment variable with Xed's path"
-       sys.exit(1)
+        print(
+            "ERROR: You need to define the $XEDPATH environment variable with Xed's path"
+        )
+        sys.exit(1)
 
     # Required paths
     if "DRIOPATH" in os.environ:
         DRIOPATH = os.environ["DRIOPATH"]
     else:
-       print "ERROR: You need to define the $DRIOPATH environment variable with Xed's path"
-       sys.exit(1)
+        print(
+            "ERROR: You need to define the $DRIOPATH environment variable with Xed's path"
+        )
+        sys.exit(1)
 
     # Required paths
     if "PINPATH" in os.environ:
         PINPATH = os.environ["PINPATH"]
     else:
-       print "ERROR: You need to define the $PINPATH environment variable with Pin's path"
-       sys.exit(1)
+        print(
+            "ERROR: You need to define the $PINPATH environment variable with Pin's path"
+        )
+        sys.exit(1)
 
-    ROOT = Dir('.').abspath
+    ROOT = Dir(".").abspath
 
     # NOTE: These flags are for the 28/02/2011 2.9 PIN kit (rev39599). Older versions will not build.
     # NOTE (dsm 10 Jan 2013): Tested with Pin 2.10 thru 2.12 as well
     # NOTE: Original Pin flags included -fno-strict-aliasing, but zsim does not do type punning
     # NOTE (dsm 16 Apr 2015): Update flags code to support Pin 2.14 while retaining backwards compatibility
-    env["CPPFLAGS"] += " -g -std=c++17 -Wall -Wno-unknown-pragmas -fomit-frame-pointer -fno-stack-protector"
-    env["CPPFLAGS"] += " -MMD -DBIGARRAY_MULTIPLIER=1 -DUSING_XED -DTARGET_IA32E -DHOST_IA32E -fPIC -DTARGET_LINUX"
+    env[
+        "CPPFLAGS"
+    ] += " -g -std=c++17 -Wall -Wno-unknown-pragmas -fomit-frame-pointer -fno-stack-protector"
+    env[
+        "CPPFLAGS"
+    ] += " -MMD -DBIGARRAY_MULTIPLIER=1 -DUSING_XED -DTARGET_IA32E -DHOST_IA32E -fPIC -DTARGET_LINUX"
     # NOTE: (mgao Jan 2017): Pin 2.14 requires ABI version of 1002, while gcc-5 and later bumps the API version.
     # Switch to gcc-4.x by using -fabi-version=2
     # FIXME(mgao): update this when upgraded to Pin 3.x
     # FIXME(hlitz): remove old ABI which is incompatible with drio, only works for memtrace (no PIN)
-    #env["CPPFLAGS"] += " -fabi-version=2  -D_GLIBCXX_USE_CXX11_ABI=0"
+    # env["CPPFLAGS"] += " -fabi-version=2  -D_GLIBCXX_USE_CXX11_ABI=0"
 
     # Pin 2.12+ kits have changed the layout of includes, detect whether we need
     # source/include/ or source/include/pin/
     pinInclDir = joinpath(PINPATH, "source/include/")
     if not TRACE:
         if not os.path.exists(joinpath(pinInclDir, "pin.H")):
-    	    pinInclDir = joinpath(pinInclDir, "pin")
+            pinInclDir = joinpath(pinInclDir, "pin")
             assert os.path.exists(joinpath(pinInclDir, "pin.H"))
 
     # Pin 2.14 changes location of XED
     xedName = "xed2"  # used below
     if TRACE:
-       xedPath = joinpath(XEDPATH, "include/")
-       xedBuildPath = joinpath(XEDPATH, "obj/")
-       xedPublicPath = joinpath(XEDPATH, "include/public/xed/")
-       drPath = joinpath(DRIOPATH, "clients/drcachesim/")
-       drTracerPath = joinpath(drPath, "tracer/")
-       drCommonPath = joinpath(drPath, "common/")
-       drReaderPath = joinpath(drPath, "reader/")
-       drIncPath = joinpath(DRIOPATH, "build/include/")
-       drExtIncPath = joinpath(DRIOPATH, "build/ext/include/")	
-       # hlitz: The following is required to complie drio headers
-       env.Append(CPPDEFINES=['LINUX'])
-       env.Append(CPPDEFINES=['X86_64'])
-       env.Append(CPPDEFINES=['VERSION_NUMBER_INTEGER 1'])
+        xedPath = joinpath(XEDPATH, "include/")
+        xedBuildPath = joinpath(XEDPATH, "obj/")
+        xedPublicPath = joinpath(XEDPATH, "include/public/xed/")
+        drPath = joinpath(DRIOPATH, "clients/drcachesim/")
+        drTracerPath = joinpath(drPath, "tracer/")
+        drCommonPath = joinpath(drPath, "common/")
+        drReaderPath = joinpath(drPath, "reader/")
+        drIncPath = joinpath(DRIOPATH, "build/include/")
+        drExtIncPath = joinpath(DRIOPATH, "build/ext/include/")
+        # hlitz: The following is required to complie drio headers
+        env.Append(CPPDEFINES=["LINUX"])
+        env.Append(CPPDEFINES=["X86_64"])
+        env.Append(CPPDEFINES=["VERSION_NUMBER_INTEGER 1"])
     else:
-	xedPath = joinpath(PINPATH, "extras/" + xedName + "-intel64/include")
-	drPATH = ""
-	drCommonPath = ""
-	drCorePath = ""
-	drIncPath = ""
-	drTracerPath = ""
-	drExtIncPath = ""
+        xedPath = joinpath(PINPATH, "extras/" + xedName + "-intel64/include")
+        drPATH = ""
+        drCommonPath = ""
+        drCorePath = ""
+        drIncPath = ""
+        drTracerPath = ""
+        drExtIncPath = ""
     if not os.path.exists(xedPath):
         xedName = "xed"
         xedPath = joinpath(PINPATH, "extras/" + xedName + "-intel64/include")
         assert os.path.exists(xedPath)
 
-
-    env["CPPPATH"] = [xedPath, xedBuildPath, xedPublicPath, drPath, drCommonPath, drReaderPath, drIncPath,
-    		   drTracerPath, drExtIncPath,
-            pinInclDir, joinpath(pinInclDir, "gen"),
-            joinpath(PINPATH, "extras/components/include")]
+    env["CPPPATH"] = [
+        xedPath,
+        xedBuildPath,
+        xedPublicPath,
+        drPath,
+        drCommonPath,
+        drReaderPath,
+        drIncPath,
+        drTracerPath,
+        drExtIncPath,
+        pinInclDir,
+        joinpath(pinInclDir, "gen"),
+        joinpath(PINPATH, "extras/components/include"),
+    ]
 
     # Perform trace logging?
     ##env["CPPFLAGS"] += " -D_LOG_TRACE_=1"
@@ -131,7 +161,10 @@ def buildSim(cppFlags, dir, type, pgo=None):
     env["PINCPPFLAGS"] = " -DMT_SAFE_LOG "
 
     # PIN-specific libraries
-    env["PINLINKFLAGS"] = " -Wl,--hash-style=sysv -Wl,-Bsymbolic -Wl,--version-script=" + joinpath(pinInclDir, "pintool.ver")
+    env["PINLINKFLAGS"] = (
+        " -Wl,--hash-style=sysv -Wl,-Bsymbolic -Wl,--version-script="
+        + joinpath(pinInclDir, "pintool.ver")
+    )
 
     # To prime system libs, we include /usr/lib and /usr/lib/x86_64-linux-gnu
     # first in lib path. In particular, this solves the issue that, in some
@@ -139,11 +172,22 @@ def buildSim(cppFlags, dir, type, pgo=None):
     # include symbols that we need or it's a different variant (we need
     # libelfg0-dev in Ubuntu systems)
     if not TRACE:
-        env["PINLIBPATH"] = ["/usr/lib", "/usr/lib/x86_64-linux-gnu", joinpath(PINPATH, "extras/" + xedName + "-intel64/lib"),
-            joinpath(PINPATH, "intel64/lib"), joinpath(PINPATH, "intel64/lib-ext")]
+        env["PINLIBPATH"] = [
+            "/usr/lib",
+            "/usr/lib/x86_64-linux-gnu",
+            joinpath(PINPATH, "extras/" + xedName + "-intel64/lib"),
+            joinpath(PINPATH, "intel64/lib"),
+            joinpath(PINPATH, "intel64/lib-ext"),
+        ]
     else:
-        env["PINLIBPATH"] = ["/usr/lib", "/usr/lib/x86_64-linux-gnu", joinpath(XEDPATH, "kits/xed-install-base-2017-07-18-lin-x86-64/lib")]
-	
+        env["PINLIBPATH"] = [
+            "/usr/lib",
+            "/usr/lib/x86_64-linux-gnu",
+            joinpath(
+                XEDPATH, "kits/xed-install-base-2017-07-18-lin-x86-64/lib"
+            ),
+        ]
+
     # Libdwarf is provided in static and shared variants, Ubuntu only provides
     # static, and I don't want to add -R<pin path/intel64/lib-ext> because
     # there are some other old libraries provided there (e.g., libelf) and I
@@ -157,29 +201,31 @@ def buildSim(cppFlags, dir, type, pgo=None):
         pindwarfLib = "pindwarf"
 
     if not TRACE:
-       env["PINLIBS"] = ["xed", pindwarfLib, "elf", "dl", "rt"]
+        env["PINLIBS"] = ["xed", pindwarfLib, "elf", "dl", "rt"]
     else:
-       env["PINLIBS"] = ["pin", "xed", pindwarfLib, "elf", "dl", "rt"]
+        env["PINLIBS"] = ["pin", "xed", pindwarfLib, "elf", "dl", "rt"]
 
     # Non-pintool libraries
     env["LIBPATH"] = []
     if TRACE:
         env["LIBPATH"] += [joinpath(XEDPATH, "obj")]
-	env["LIBPATH"] += [joinpath(DRIOPATH, "build/clients/lib64/release")]
-	env["LIBPATH"] += [joinpath(DRIOPATH, "build/api/bin/")]
-	env["LIBPATH"] += [joinpath(DRIOPATH, "build/ext/lib64/release")]
-	env["LIBPATH"] += [joinpath(DRIOPATH, "build/lib64/release")]
-	env["LIBPATH"] += [joinpath(DRIOPATH, "build/lib64/")]	
-    env["LIBS"] = ["config++","dl"]
-    #env["LIBS"] += ["drcovlib","drcontainers","drreg","drsyms","drutil","drwrap","drx","drpreload","dynamorio",]
-    #env["LIBS"] += ["drmgr"]	
+        env["LIBPATH"] += [joinpath(DRIOPATH, "build/clients/lib64/release")]
+        env["LIBPATH"] += [joinpath(DRIOPATH, "build/api/bin/")]
+        env["LIBPATH"] += [joinpath(DRIOPATH, "build/ext/lib64/release")]
+        env["LIBPATH"] += [joinpath(DRIOPATH, "build/lib64/release")]
+        env["LIBPATH"] += [joinpath(DRIOPATH, "build/lib64/")]
+    env["LIBS"] = ["config++", "dl"]
+    # env["LIBS"] += ["drcovlib","drcontainers","drreg","drsyms","drutil","drwrap","drx","drpreload","dynamorio",]
+    # env["LIBS"] += ["drmgr"]
 
-    env["LINKFLAGS"]=['-Wl,--start-group']
-    #env["LINKFLAGS"] = ""
+    env["LINKFLAGS"] = ["-Wl,--start-group"]
+    # env["LINKFLAGS"] = ""
 
     if useIcc:
         # icc libs
-        env["LINKFLAGS"] += " -Wl,-R/data/sanchez/tools/intel/composer_xe_2013.1.117/compiler/lib/intel64/"
+        env[
+            "LINKFLAGS"
+        ] += " -Wl,-R/data/sanchez/tools/intel/composer_xe_2013.1.117/compiler/lib/intel64/"
 
     # Use non-standard library paths if defined
     if "LIBCONFIGPATH" in os.environ:
@@ -187,7 +233,6 @@ def buildSim(cppFlags, dir, type, pgo=None):
         env["LINKFLAGS"] += " -Wl,-R" + joinpath(LIBCONFIGPATH, "lib")
         env["LIBPATH"] += [joinpath(LIBCONFIGPATH, "lib")]
         env["CPPPATH"] += [joinpath(LIBCONFIGPATH, "include")]
-
 
     if "POLARSSLPATH" in os.environ:
         POLARSSLPATH = os.environ["POLARSSLPATH"]
@@ -208,22 +253,32 @@ def buildSim(cppFlags, dir, type, pgo=None):
     env["CPPPATH"] += ["."]
 
     # HDF5
-    conf = Configure(Environment(), conf_dir=joinpath(buildDir, ".sconf_temp"), log_file=joinpath(buildDir, "sconf.log"))
-    #if conf.CheckLib('hdf5') and conf.CheckLib('hdf5_hl'):
+    conf = Configure(
+        Environment(),
+        conf_dir=joinpath(buildDir, ".sconf_temp"),
+        log_file=joinpath(buildDir, "sconf.log"),
+    )
+    # if conf.CheckLib('hdf5') and conf.CheckLib('hdf5_hl'):
     #    env["PINLIBS"] += ["hdf5", "hdf5_hl"]
-    if conf.CheckLib('hdf5_serial') and conf.CheckLib('hdf5_serial_hl'):
-    # Serial version, in Ubuntu 15.04 and later.
+    if conf.CheckLib("hdf5_serial") and conf.CheckLib("hdf5_serial_hl"):
+        # Serial version, in Ubuntu 15.04 and later.
         env["PINLIBS"] += ["hdf5_serial", "hdf5_serial_hl"]
         env["CPPFLAGS"] += ' -DHDF5INCPREFIX="hdf5/serial/"'
     else:
-       print "ERROR: You need to install libhdf5 in the system"
-       sys.exit(1)
+        print("ERROR: You need to install libhdf5 in the system")
+        sys.exit(1)
 
     # Harness needs these defined
-    env["CPPFLAGS"] += ' -DPIN_PATH="' + joinpath(PINPATH, "intel64/bin/pinbin") + '" '
-    env["CPPFLAGS"] += ' -DZSIM_PATH="' + joinpath(ROOT, joinpath(buildDir, "libzsim.so")) + '" '
+    env["CPPFLAGS"] += (
+        ' -DPIN_PATH="' + joinpath(PINPATH, "intel64/bin/pinbin") + '" '
+    )
+    env["CPPFLAGS"] += (
+        ' -DZSIM_PATH="'
+        + joinpath(ROOT, joinpath(buildDir, "libzsim.so"))
+        + '" '
+    )
 
-    env["CPPFLAGS"] += ' -DTRACE_BASED=1'
+    env["CPPFLAGS"] += " -DTRACE_BASED=1"
 
     # Do PGO?
     if pgo == "generate":
@@ -231,38 +286,88 @@ def buildSim(cppFlags, dir, type, pgo=None):
         env["PINCPPFLAGS"] += genFlags
         env["PINLINKFLAGS"] += genFlags
     elif pgo == "use":
-        if useIcc: useFlags = " -prof-use "
-        else: useFlags = " -fprofile-use -fprofile-correction "
+        if useIcc:
+            useFlags = " -prof-use "
+        else:
+            useFlags = " -fprofile-use -fprofile-correction "
         # even single-threaded sims use internal threads, so we need correction
         env["PINCPPFLAGS"] += useFlags
         env["PINLINKFLAGS"] += useFlags
-    
-    env.SConscript("src/SConscript", variant_dir=buildDir, exports= {'env' : env.Clone()})
-    
+
+    env.SConscript(
+        "src/SConscript", variant_dir=buildDir, exports={"env": env.Clone()}
+    )
+
+
 ####
 
-AddOption('--buildDir', dest='buildDir', type='string', default="build/", nargs=1, action='store', metavar='DIR', help='Base build directory')
-AddOption('--d', dest='debugBuild', default=False, action='store_true', help='Do a debug build')
-AddOption('--o', dest='optBuild', default=False, action='store_true', help='Do an opt build (optimized, with assertions and symbols)')
-AddOption('--r', dest='releaseBuild', default=False, action='store_true', help='Do a release build (optimized, no assertions, no symbols)')
-AddOption('--p', dest='pgoBuild', default=False, action='store_true', help='Enable PGO')
-AddOption('--pgoPhase', dest='pgoPhase', default="none", action='store', help='PGO phase (just run with --p to do them all)')
+AddOption(
+    "--buildDir",
+    dest="buildDir",
+    type="string",
+    default="build/",
+    nargs=1,
+    action="store",
+    metavar="DIR",
+    help="Base build directory",
+)
+AddOption(
+    "--d",
+    dest="debugBuild",
+    default=False,
+    action="store_true",
+    help="Do a debug build",
+)
+AddOption(
+    "--o",
+    dest="optBuild",
+    default=False,
+    action="store_true",
+    help="Do an opt build (optimized, with assertions and symbols)",
+)
+AddOption(
+    "--r",
+    dest="releaseBuild",
+    default=False,
+    action="store_true",
+    help="Do a release build (optimized, no assertions, no symbols)",
+)
+AddOption(
+    "--p",
+    dest="pgoBuild",
+    default=False,
+    action="store_true",
+    help="Enable PGO",
+)
+AddOption(
+    "--pgoPhase",
+    dest="pgoPhase",
+    default="none",
+    action="store",
+    help="PGO phase (just run with --p to do them all)",
+)
 
 
-baseBuildDir = GetOption('buildDir')
+baseBuildDir = GetOption("buildDir")
 buildTypes = []
-if GetOption('debugBuild'): buildTypes.append("debug")
-if GetOption('releaseBuild'): buildTypes.append("release")
-if GetOption('optBuild') or len(buildTypes) == 0: buildTypes.append("opt")
+if GetOption("debugBuild"):
+    buildTypes.append("debug")
+if GetOption("releaseBuild"):
+    buildTypes.append("release")
+if GetOption("optBuild") or len(buildTypes) == 0:
+    buildTypes.append("opt")
 
-march = "core2" # ensure compatibility across condor nodes
-#march = "native" # for profiling runs
+march = "core2"  # ensure compatibility across condor nodes
+# march = "native" # for profiling runs
 
-buildFlags = {"debug": "-g -O0",
-              "opt": "-march=%s -g -O3 -funroll-loops" % march, # unroll loops tends to help in zsim, but in general it can cause slowdown
-              "release": "-march=%s -O3 -DNASSERT -funroll-loops -fweb" % march} # fweb saves ~4% exec time, but makes debugging a world of pain, so careful
+buildFlags = {
+    "debug": "-g -O0",
+    "opt": "-march=%s -g -O3 -funroll-loops"
+    % march,  # unroll loops tends to help in zsim, but in general it can cause slowdown
+    "release": "-march=%s -O3 -DNASSERT -funroll-loops -fweb" % march,
+}  # fweb saves ~4% exec time, but makes debugging a world of pain, so careful
 
-pgoPhase = GetOption('pgoPhase')
+pgoPhase = GetOption("pgoPhase")
 
 # The PGO flow calls scons recursively. Hacky, but pretty much the only option:
 # scons can't build the same file twice, and although gcc enables you to change
@@ -270,22 +375,30 @@ pgoPhase = GetOption('pgoPhase')
 # (e.g., build/opt/zsim.os), and all hell breaks loose when it tries to create
 # files in another dir. And because it uses checksums for filenames, it breaks
 # when you move the files. Check the repo for a version that tries this.
-if GetOption('pgoBuild'):
+if GetOption("pgoBuild"):
     for type in buildTypes:
-        print "Building PGO binary"
-        root = Dir('.').abspath
+        print("Building PGO binary")
+        root = Dir(".").abspath
         testsDir = joinpath(root, "tests")
         trainCfgs = [f for f in os.listdir(testsDir) if f.startswith("pgo")]
-        print "Using training configs", trainCfgs
+        print("Using training configs", trainCfgs)
 
         baseDir = joinpath(baseBuildDir, "pgo-" + type)
         genCmd = "scons -j16 --pgoPhase=generate-" + type
         runCmds = []
         for cfg in trainCfgs:
-            runCmd = "mkdir -p pgo-tmp && cd pgo-tmp && ../" + baseDir + "/zsim ../tests/" + cfg + " && cd .."
+            runCmd = (
+                "mkdir -p pgo-tmp && cd pgo-tmp && ../"
+                + baseDir
+                + "/zsim ../tests/"
+                + cfg
+                + " && cd .."
+            )
             runCmds.append(runCmd)
         useCmd = "scons -j16 --pgoPhase=use-" + type
-        Environment(ENV = os.environ).Command("dummyTgt-" + type, [], " && ".join([genCmd] + runCmds + [useCmd]))
+        Environment(ENV=os.environ).Command(
+            "dummyTgt-" + type, [], " && ".join([genCmd] + runCmds + [useCmd])
+        )
 elif pgoPhase.startswith("generate"):
     type = pgoPhase.split("-")[1]
     buildSim(buildFlags[type], baseBuildDir, "pgo-" + type, "generate")
@@ -293,7 +406,9 @@ elif pgoPhase.startswith("use"):
     type = pgoPhase.split("-")[1]
     buildSim(buildFlags[type], baseBuildDir, "pgo-" + type, "use")
     baseDir = joinpath(baseBuildDir, "pgo-" + type)
-    Depends(Glob(joinpath(baseDir, "*.os")), "pgo-tmp/zsim.out") #force a rebuild
+    Depends(
+        Glob(joinpath(baseDir, "*.os")), "pgo-tmp/zsim.out"
+    )  # force a rebuild
 else:
     for type in buildTypes:
         buildSim(buildFlags[type], baseBuildDir, type)

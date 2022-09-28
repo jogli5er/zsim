@@ -1,0 +1,29 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "options": {
+        "env": {
+            "PINPATH": "/opt/pin",
+            "XEDPATH": "/home/robrunne/Workspace/Simulators/xed",
+            "LD_LIBRARY_PATH": "$XEDPATH/kits/xed-install-base-2022-09-19-lin-x86-64/lib",
+            "DRIOPATH": "/home/robrunne/Workspace/dynamorio_orig/dynamorio",
+        }
+    },
+    "tasks": [
+        {
+            "label": "SCons Debug Build",
+            "command": "scons",
+            "type": "shell",
+            "group": "build",
+            "dependsOn": [
+                "Build Prepare"
+            ],
+            "args": [
+                "-j7",
+                "--d"
+            ],
+            "problemMatcher": "$msCompile"
+        }
+    ]
+}
