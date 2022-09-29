@@ -68,7 +68,7 @@ class Cache : public BaseCache {
                    Network* network) override;
   g_vector<BaseCache*>* getChildren() override { return cc->getChildren(); }
   void initStats(AggregateStat* parentStat) override;
-  bool isPresent(Address lineAddr) {
+  virtual bool isPresent(Address lineAddr) {
     uint64_t avail_cycle;
     int32_t lineId = array->lookup(lineAddr, nullptr, false, &avail_cycle);
     return (lineId != -1 && cc->isValid(lineId));
