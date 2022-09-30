@@ -1,2 +1,0 @@
-#define ZSIM_BUILDDATE "Mi 21 Sep 2022 11:40:02 CEST"
-#define ZSIM_BUILDVERSION "memtrace:154:1aef844:7fc 797+ 525- 3cd4f476"

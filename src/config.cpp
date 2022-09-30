@@ -28,6 +28,7 @@
 #include <string.h>
 
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <typeinfo>
 #include <vector>
@@ -306,6 +307,35 @@ T Config::genericGet(const char* key) {
   return val;
 }
 
+template <typename T>
+std::vector<T> Config::genericGetArray(const char* key) {
+  std::vector<T> result;
+  if (!inCfg->exists(key)) {
+    return result;
+  }
+  libconfig::Setting& settings = inCfg->lookup(key);
+  for (int i = 0; i < settings.getLength(); i++) {
+    T val;
+    switch (settings[i].getType()) {
+      case libconfig::Setting::TypeInt:
+        val = (T)(int)settings[i];
+        break;
+      case libconfig::Setting::TypeInt64:
+        val = (T)(long long)settings[i];
+        break;
+      case libconfig::Setting::TypeFloat:
+        val = (T)(double)settings[i];
+        break;
+      default:
+        throw std::invalid_argument(
+            "So far only implemented for numbers - add cases if you need "
+            "something different");
+    }
+    result.push_back(val);
+  }
+  return result;
+}
+
 // Template specializations for access interface
 template <>
 uint32_t Config::get<uint32_t>(const char* key) {
@@ -315,6 +345,7 @@ template <>
 uint64_t Config::get<uint64_t>(const char* key) {
   return (uint64_t)genericGet<lc_int64>(key);
 }
+
 template <>
 bool Config::get<bool>(const char* key) {
   return genericGet<bool>(key);
@@ -326,6 +357,11 @@ const char* Config::get<const char*>(const char* key) {
 template <>
 double Config::get<double>(const char* key) {
   return (double)genericGet<double>(key);
+}
+
+template <>
+std::vector<uint8_t> Config::getArray<uint8_t>(const char* key) {
+  return genericGetArray<unsigned char>(key);
 }
 
 template <>
@@ -419,7 +455,8 @@ struct Range {
         break;
       default:
         panic(
-            "Range '%s' can only have 1-3 numbers delimited by ':', %ld parsed",
+            "Range '%s' can only have 1-3 numbers delimited by ':', %ld "
+            "parsed",
             r.c_str(), n.size());
     }
 

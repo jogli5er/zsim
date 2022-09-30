@@ -41,8 +41,22 @@ sys = {
             caches = 1;
             size = 32768;
             array = {
-                type = "SetAssoc";
+                type = "VCL";
                 ways = 8;
+                waySizes = [
+                    8,
+                    15,
+                    23,
+                    32,
+                    48,
+                    64,
+                    64,
+                    64
+                ];
+            };
+            repl :
+            {
+                type = "LRU";
             };
             latency = 3;
             #Next line prefetcher at L1 access

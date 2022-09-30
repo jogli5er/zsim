@@ -111,13 +111,16 @@ BaseCache* BuildCacheBank(Config& config, const string& prefix, g_string& name,
   // TODO: change for vcl if needed
   uint32_t numHashes = 1;
   uint32_t ways = config.get<uint32_t>(prefix + "array.ways", 4);
+  const std::vector<uint8_t>& waySizes =
+      config.getArray<uint8_t>((prefix + "array.waySizes").c_str());
   string arrayType = config.get<const char*>(prefix + "array.type", "SetAssoc");
   uint32_t candidates =
       (arrayType == "Z") ? config.get<uint32_t>(prefix + "array.candidates", 16)
                          : ways;
+  assert(arrayType != "LRU" || ways == waySizes.size());
 
   // Need to know number of hash functions before instantiating array
-  if (arrayType == "SetAssoc") {
+  if (arrayType == "SetAssoc" || arrayType == "VCL") {
     numHashes = 1;
   } else if (arrayType == "Z") {
     numHashes = ways;
@@ -281,6 +284,8 @@ BaseCache* BuildCacheBank(Config& config, const string& prefix, g_string& name,
     IdealLRUPartReplPolicy* irp = dynamic_cast<IdealLRUPartReplPolicy*>(rp);
     if (!irp) panic("IdealLRUPart array needs IdealLRUPart repl policy!");
     array = new IdealLRUPartArray(numLines, irp);
+  } else if (arrayType == "VCL") {
+    array = new VCLCacheArray(numLines, waySizes, rp, hf);
   } else {
     panic("This should not happen, we already checked for it!");  // unless
                                                                   // someone

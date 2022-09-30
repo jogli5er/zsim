@@ -49,6 +49,7 @@ traceSrcs = [
     "trace_zsim.cpp",
     "tracing_cache.cpp",
     "utility_monitor.cpp",
+    "vcl_cache.cpp",
 ]
 
 traceReaderSrcs = ["trace_reader.cpp", "trace_reader_memtrace.cpp"]
