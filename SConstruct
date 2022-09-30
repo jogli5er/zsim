@@ -214,6 +214,7 @@ def buildSim(cppFlags, dir, type, pgo=None):
         env["LIBPATH"] += [joinpath(DRIOPATH, "build/ext/lib64/release")]
         env["LIBPATH"] += [joinpath(DRIOPATH, "build/lib64/release")]
         env["LIBPATH"] += [joinpath(DRIOPATH, "build/lib64/")]
+        env["LIBPATH"] += ["/usr/lib/x86_64-linux-gnu"]
     env["LIBS"] = ["config++", "dl"]
     # env["LIBS"] += ["drcovlib","drcontainers","drreg","drsyms","drutil","drwrap","drx","drpreload","dynamorio",]
     # env["LIBS"] += ["drmgr"]
