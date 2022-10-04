@@ -72,6 +72,7 @@
 #include "timing_event.h"
 #include "trace_driver.h"
 #include "tracing_cache.h"
+#include "vcl_cache.h"
 #include "weave_md1_mem.h"  //validation, could be taken out...
 #ifdef ZSIM_USE_YT
 #include "table_prefetcher.h"
@@ -330,6 +331,9 @@ BaseCache* BuildCacheBank(Config& config, const string& prefix, g_string& name,
         traceFile = g_string(zinfo->outputDir) + "/" + name + ".trace";
       cache = new TracingCache(numLines, cc, array, rp, accLat, invLat,
                                traceFile, name);
+    } else if (type == "VCL") {
+      cache =
+          new VCLCache(numLines, waySizes, cc, array, rp, accLat, invLat, name);
     } else {
       panic("Invalid cache type %s", type.c_str());
     }
@@ -337,7 +341,8 @@ BaseCache* BuildCacheBank(Config& config, const string& prefix, g_string& name,
     // Filter cache optimization
     if (type != "Simple")
       panic("Terminal cache %s can only have type == Simple", name.c_str());
-    if (arrayType != "SetAssoc" || hashType != "None" || replType != "LRU")
+    if ((arrayType != "SetAssoc" && arrayType != "VCL") || hashType != "None" ||
+        replType != "LRU")
       panic("Invalid FilterCache config %s", name.c_str());
 
     // Access based Next Line Prefetch
@@ -1386,7 +1391,7 @@ void SimInit(const char* configFile, const char* outputDir, uint32_t shmid) {
 
   // Write config out
   bool strictConfig = config.get<bool>(
-      "sim.strictConfig", true);  // if true, panic on unused variables
+      "sim.strictConfig", false);  // if true, panic on unused variables
   config.writeAndClose((string(zinfo->outputDir) + "/out.cfg").c_str(),
                        strictConfig);
 

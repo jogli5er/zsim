@@ -80,6 +80,15 @@ class Cache : public BaseCache {
     startInvalidate();
     return finishInvalidate(req);
   }
+  virtual inline uint64_t load(Address vAddr, uint64_t curCycle, Address pc) {
+    throw std::exception();
+    return 0;
+  };
+
+  virtual uint64_t replace(Address, uint32_t, bool, uint64_t, Address) {
+    throw std::exception();
+    return 0;
+  };
 
  protected:
   void initCacheStats(AggregateStat* cacheStat);

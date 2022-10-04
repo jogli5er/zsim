@@ -61,7 +61,7 @@ sys = {
             latency = 3;
             #Next line prefetcher at L1 access
             numLinesNLP = 1;
-            #Perfect memory, all memory accesses (instructions) have L1 latency
+            #Perfect memory, all memory accesses(instructions) have L1 latency
             zeroLatencyCache = false;
         };
         l1d = {
@@ -74,7 +74,7 @@ sys = {
             latency = 4;
             #Next line prefetcher at L1 access
             numLinesNLP = 1;
-            #Perfect memory, all memory accesses (data) have L1 latency
+            #Perfect memory, all memory accesses(data) have L1 latency
             zeroLatencyCache = false;
         };
         l2 = {
@@ -114,5 +114,5 @@ sys = {
     };
 };
 trace_type = "PT";
-trace0 = "/home/robrunne/OneDrive/Research/datasets/traces/wordpress/trace.gz";
+trace0 = "/home/robrunne/OneDrive/Research/datasets/traces/finagle-http/trace.gz";
 # trace0 ... traceN paths

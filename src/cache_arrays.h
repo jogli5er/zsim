@@ -41,6 +41,11 @@ struct AddrCycle {
   uint64_t pc;
 };
 
+struct AddrCycleVcl : public AddrCycle {
+  uint8_t startOffset;
+  uint8_t blockSize;
+};
+
 /* General interface of a cache array. The array is a fixed-size associative
  * container that translates addresses to line IDs. A line ID represents the
  * position of the tag. The other cache components store tag data in
@@ -135,6 +140,31 @@ class SetAssocArray : public CacheArray {
 };
 
 class VCLCacheArray : public CacheArray {
+ private:
+  AddrCycleVcl* array;
+  uint32_t* lookupArray;
+  ReplPolicy* rp;
+  HashFamily* hf;
+  uint32_t numLines;
+  uint32_t numSets;
+  std::vector<uint8_t> waySizes;
+  uint32_t assoc;
+  uint32_t setMask;
+
+  Counter profPrefHit;
+  Counter profPrefEarlyMiss;
+  Counter profPrefLateMiss;
+  Counter profPrefLateTotalCycles;
+  Counter profPrefSavedCycles;
+  Counter profPrefInaccurateOOO;
+  Counter profHitDelayCycles;
+  Counter profPrefHitPref;
+  Counter profPrefAccesses;
+  Counter profPrefInCache;
+  Counter profPrefNotInCache;
+  Counter profPrefPostInsert;
+  Counter profPrefReplacePref;
+
  public:
   VCLCacheArray(uint32_t _num_lines, std::vector<uint8_t> ways, ReplPolicy* _rp,
                 HashFamily* _hf);

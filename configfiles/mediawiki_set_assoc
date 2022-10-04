@@ -114,5 +114,5 @@ sys = {
     };
 };
 trace_type = "PT";
-trace0 = "/home/robrunne/OneDrive/Research/datasets/traces/wordpress/trace.gz";
+trace0 = "/home/robrunne/OneDrive/Research/datasets/traces/mediawiki/trace.gz";
 # trace0 ... traceN paths

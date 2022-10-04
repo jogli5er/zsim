@@ -57,7 +57,7 @@ class FilterCache : public Cache {
   };
 
   // Replicates the most accessed line of each set in the cache
-  FilterEntry* filterArray;
+  // FilterEntry* filterArray;
   Address setMask;
   uint32_t numSets;
   uint32_t srcId;  // should match the core
@@ -91,8 +91,8 @@ class FilterCache : public Cache {
       : Cache(_numLines, _cc, _array, _rp, _accLat, _invLat, _name) {
     numSets = _numSets;
     setMask = numSets - 1;
-    filterArray = gm_memalign<FilterEntry>(CACHE_LINE_BYTES, numSets);
-    for (uint32_t i = 0; i < numSets; i++) filterArray[i].clear();
+    // filterArray = gm_memalign<FilterEntry>(CACHE_LINE_BYTES, numSets);
+    // for (uint32_t i = 0; i < numSets; i++) filterArray[i].clear();
     futex_init(&filterLock);
     fGETSHit = fGETXHit = 0;
     srcId = -1;
@@ -129,37 +129,40 @@ class FilterCache : public Cache {
   inline uint64_t load(Address vAddr, uint64_t curCycle, Address pc) {
     Address vLineAddr = vAddr >> lineBits;
     uint32_t idx = vLineAddr & setMask;
-    uint64_t availCycle =
-        filterArray[idx].availCycle;  // read before, careful with ordering to
-                                      // avoid timing races
+    // uint64_t availCycle =
+    //     filterArray[idx].availCycle;  // read before, careful with ordering
+    //     to
+    // avoid timing races
 
     // Only read from filter cache if line is already present, otherwise perform
     // L1  access This introduces a 3% slow down but improves fidelty in the
     // case of out-of-order loads (zsim executes loads potentially OOO as BBL
     // instructions are executed sequentially)
-    if (vLineAddr == filterArray[idx].rdAddr && availCycle < curCycle) {
-      fGETSHit++;
-      return MAX(curCycle + accLat, availCycle);
-    } else {
-      return replace(vLineAddr, idx, true, curCycle, pc);
-    }
+    // if (vLineAddr == filterArray[idx].rdAddr && availCycle < curCycle) {
+    //   fGETSHit++;
+    //   return MAX(curCycle + accLat, availCycle);
+    // } else {
+    return replace(vLineAddr, idx, true, curCycle, pc);
+    //}
   }
 
   inline uint64_t store(Address vAddr, uint64_t curCycle, Address pc) {
     Address vLineAddr = vAddr >> lineBits;
     uint32_t idx = vLineAddr & setMask;
-    uint64_t availCycle =
-        filterArray[idx].availCycle;  // read before, careful with ordering to
-                                      // avoid timing races
-    if (vLineAddr == filterArray[idx].wrAddr) {
-      fGETXHit++;
-      // NOTE: Stores don't modify availCycle; we'll catch matches in the core
-      // filterArray[idx].availCycle = curCycle; //do optimistic store-load
-      // forwarding
-      return MAX(curCycle + accLat, availCycle);
-    } else {
-      return replace(vLineAddr, idx, false, curCycle, pc);
-    }
+    // uint64_t availCycle =
+    //     filterArray[idx].availCycle;  // read before, careful with ordering
+    //     to
+    //                                   // avoid timing races
+    // if (vLineAddr == filterArray[idx].wrAddr) {
+    //   fGETXHit++;
+    //   // NOTE: Stores don't modify availCycle; we'll catch matches in the
+    //   core
+    //   // filterArray[idx].availCycle = curCycle; //do optimistic store-load
+    //   // forwarding
+    //   return MAX(curCycle + accLat, availCycle);
+    // } else {
+    return replace(vLineAddr, idx, false, curCycle, pc);
+    //}
   }
 
   uint64_t replace(Address vLineAddr, uint32_t idx, bool isLoad,
@@ -178,16 +181,16 @@ class FilterCache : public Cache {
     // lock
 
     // Careful with this order
-    Address oldAddr = filterArray[idx].rdAddr;
-    filterArray[idx].wrAddr = isLoad ? -1L : vLineAddr;
-    filterArray[idx].rdAddr = vLineAddr;
+    // Address oldAddr = filterArray[idx].rdAddr;
+    // filterArray[idx].wrAddr = isLoad ? -1L : vLineAddr;
+    // filterArray[idx].rdAddr = vLineAddr;
 
     // For LSU simulation purposes, loads bypass stores even to the same line if
     // there is no conflict, (e.g., st to x, ld from x+8) and we implement
     // store-load forwarding at the core. So if this is a load, it always sets
     // availCycle; if it is a store hit, it doesn't
 
-    if (oldAddr != vLineAddr) filterArray[idx].availCycle = respCycle;
+    // if (oldAddr != vLineAddr) filterArray[idx].availCycle = respCycle;
 
     futex_unlock(&filterLock);
     return respCycle;
@@ -196,16 +199,17 @@ class FilterCache : public Cache {
   uint64_t invalidate(const InvReq& req) {
     Cache::startInvalidate();  // grabs cache's downLock
     futex_lock(&filterLock);
-    uint32_t idx =
-        req.lineAddr &
-        setMask;  // works because of how virtual<->physical is done...
-    if ((filterArray[idx].rdAddr | procMask) ==
-        req.lineAddr) {  // FIXME: If another process calls invalidate(),
-                         // procMask will not match even though we may be doing
-                         // a capacity-induced invalidation!
-      filterArray[idx].wrAddr = -1L;
-      filterArray[idx].rdAddr = -1L;
-    }
+    // uint32_t idx =
+    //     req.lineAddr &
+    //     setMask;  // works because of how virtual<->physical is done...
+    // if ((filterArray[idx].rdAddr | procMask) ==
+    //     req.lineAddr) {  // FIXME: If another process calls invalidate(),
+    //                      // procMask will not match even though we may be
+    //                      doing
+    //                      // a capacity-induced invalidation!
+    //   filterArray[idx].wrAddr = -1L;
+    //   filterArray[idx].rdAddr = -1L;
+    // }
     uint64_t respCycle =
         Cache::finishInvalidate(req);  // releases cache's downLock
     futex_unlock(&filterLock);
@@ -260,9 +264,9 @@ class FilterCache : public Cache {
   }
 
   void contextSwitch() {
-    futex_lock(&filterLock);
-    for (uint32_t i = 0; i < numSets; i++) filterArray[i].clear();
-    futex_unlock(&filterLock);
+    // futex_lock(&filterLock);
+    // for (uint32_t i = 0; i < numSets; i++) filterArray[i].clear();
+    // futex_unlock(&filterLock);
   }
 
  private:

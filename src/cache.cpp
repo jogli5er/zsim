@@ -27,6 +27,7 @@
 
 #include "event_recorder.h"
 #include "hash.h"
+#include "string"
 #ifndef EXTERNAL_CACHE_MODEL
 #include "timing_event.h"
 #endif

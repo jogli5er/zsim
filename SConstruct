@@ -215,6 +215,8 @@ def buildSim(cppFlags, dir, type, pgo=None):
         env["LIBPATH"] += [joinpath(DRIOPATH, "build/lib64/release")]
         env["LIBPATH"] += [joinpath(DRIOPATH, "build/lib64/")]
         env["LIBPATH"] += ["/usr/lib/x86_64-linux-gnu"]
+        env["LIBPATH"] += ["/usr/lib/x86_64-linux-gnu/hdf5"]
+        env["LIBPATH"] += ["/usr/lib/x86_64-linux-gnu/hdf5/serial"]
     env["LIBS"] = ["config++", "dl"]
     # env["LIBS"] += ["drcovlib","drcontainers","drreg","drsyms","drutil","drwrap","drx","drpreload","dynamorio",]
     # env["LIBS"] += ["drmgr"]
@@ -255,7 +257,7 @@ def buildSim(cppFlags, dir, type, pgo=None):
 
     # HDF5
     conf = Configure(
-        Environment(),
+        env,
         conf_dir=joinpath(buildDir, ".sconf_temp"),
         log_file=joinpath(buildDir, "sconf.log"),
     )
@@ -266,8 +268,9 @@ def buildSim(cppFlags, dir, type, pgo=None):
         env["PINLIBS"] += ["hdf5_serial", "hdf5_serial_hl"]
         env["CPPFLAGS"] += ' -DHDF5INCPREFIX="hdf5/serial/"'
     else:
-        print("ERROR: You need to install libhdf5 in the system")
-        sys.exit(1)
+        env[
+            "CPPFLAGS"
+        ] += " -L/usr/lib/x86_64-linux-gnu/hdf5/serial -lhdf5_cpp -lhdf5"
 
     # Harness needs these defined
     env["CPPFLAGS"] += (
