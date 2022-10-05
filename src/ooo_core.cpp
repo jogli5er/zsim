@@ -42,6 +42,10 @@
 #define LSU_IW_BACKPRESSURE
 
 #define DEBUG_MSG(args...)
+#define IS_COND_BR(type) (type == XED_CATEGORY_COND_BR)
+#define IS_RET(type) (type == XED_CATEGORY_RET || type == XED_CATEGORY_SYSRET)
+#define IS_UNCOND_BR(type) \
+  (type == XED_CATEGORY_UNCOND_BR || type == XED_CATEGORY_CALL)
 //#define DEBUG_MSG(args...) info(args)
 
 // Core parameters
@@ -96,12 +100,12 @@ void OOOCore::initStats(AggregateStat* parentStat) {
   LambdaStat<decltype(y)>* cCyclesStat = new LambdaStat<decltype(y)>(y);
   cCyclesStat->init("cCycles", "Cycles due to contention stalls");
 
-  disp.init("Branching Displacement",
+  disp.init("disp",
             "Contains the offsets of branches taken. Returns are considered 0 "
             "length (target present in register).",
             66);
 
-  lowBits.init("Low Bits Matching",
+  lowBits.init("lowBits",
                "Count 0 bits starting at the little end - gives us how far we "
                "have jumped.",
                66);
@@ -145,6 +149,8 @@ void OOOCore::initStats(AggregateStat* parentStat) {
   profRRStalls.init("rrStalls", "Register Renaming stalls");
   coreStat->append(&profRRStalls);
   profMispredStalls.init("bpStalls", "Branch Misprediction stalls");
+  profTakenBranches.init("takenCondBranches", "Taken conditional branches");
+  coreStat->append(&profTakenBranches);
   coreStat->append(&profMispredStalls);
 #endif
 
@@ -187,11 +193,12 @@ void OOOCore::predFalseMemOp() {
 }
 
 void OOOCore::branch(Address pc, bool taken, Address takenNpc,
-                     Address notTakenNpc) {
+                     Address notTakenNpc, xed_category_enum_t category) {
   branchPc = pc;
   branchTaken = taken;
   branchTakenNpc = takenNpc;
   branchNotTakenNpc = notTakenNpc;
+  branchType = category;
 }
 
 inline void OOOCore::bbl(Address bblAddr, BblInfo* bblInfo) {
@@ -460,10 +467,44 @@ inline void OOOCore::bbl(Address bblAddr, BblInfo* bblInfo) {
 #endif
 
   // Simulate branch prediction
-  if (branchPc) {
+  if (branchPc && IS_COND_BR(branchType)) {
     profCondBranches.inc(1);
+    if (branchTaken) {
+      profTakenBranches.inc(1);
+    }
   }
-  if (branchPc && !branchPred->predict(branchPc, branchTaken)) {
+
+  if (branchPc && IS_COND_BR(branchType) && branchTaken) {
+    if (branchPc == bblAddr) {
+      std::cout << "WTF - branch to yourself?" << std::endl;
+    }
+    uint64_t diff_bits = bblAddr ^ branchPc;
+    int num_lower_bits = 0;
+    while (diff_bits != 0) {
+      diff_bits = diff_bits >> 1;
+      num_lower_bits++;
+    }
+
+    lowBits.atomicInc(num_lower_bits);
+  } else if (branchPc && IS_RET(branchType)) {
+    disp.atomicInc(0);
+    lowBits.atomicInc(0);
+  } else if (branchPc && branchPc != bblAddr) {
+    if (branchPc == bblAddr) {
+      std::cout << "WTF - branch to yourself?" << std::endl;
+    }
+    uint64_t diff_bits = bblAddr ^ branchPc;
+    int num_lower_bits = 0;
+    while (diff_bits != 0) {
+      diff_bits = diff_bits >> 1;
+      num_lower_bits++;
+    }
+
+    lowBits.atomicInc(num_lower_bits);
+  }
+
+  if (IS_COND_BR(branchType) && branchPc &&
+      !branchPred->predict(branchPc, branchTaken)) {
     mispredBranches++;
 
     /* Simulate wrong-path fetches
@@ -511,16 +552,8 @@ inline void OOOCore::bbl(Address bblAddr, BblInfo* bblInfo) {
   uint64_t fetchCycleBeforeI = fetchCycle;
 #endif
 
-  uint64_t diff_bits = bblAddr ^ branchPc;
-  int num_lower_bits = 0;
-
-  while (diff_bits != 0) {
-    diff_bits = diff_bits >> 1;
-    num_lower_bits++;
-  }
-
-  // TDO : Set branching fields for every branch - then collect information.
   branchPc = 0;  // clear for next BBL
+  branchType = XED_CATEGORY_INVALID;
 
   // Simulate current bbl ifetch
   Address endAddr = bblAddr + bblInfo->bytes;
@@ -651,6 +684,7 @@ void OOOCore::BblFunc(THREADID tid, ADDRINT bblAddr, BblInfo* bblInfo) {
 }
 
 void OOOCore::BranchFunc(THREADID tid, ADDRINT pc, BOOL taken, ADDRINT takenNpc,
-                         ADDRINT notTakenNpc) {
-  static_cast<OOOCore*>(cores[tid])->branch(pc, taken, takenNpc, notTakenNpc);
+                         ADDRINT notTakenNpc, INS_CAT category) {
+  static_cast<OOOCore*>(cores[tid])
+      ->branch(pc, taken, takenNpc, notTakenNpc, category);
 }

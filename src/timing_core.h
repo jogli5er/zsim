@@ -36,49 +36,52 @@
 class FilterCache;
 
 class TimingCore : public Core {
-    private:
-        FilterCache* l1i;
-        FilterCache* l1d;
+ private:
+  FilterCache* l1i;
+  FilterCache* l1d;
 
-        uint64_t instrs;
+  uint64_t instrs;
 
-        uint64_t curCycle; //phase 1 clock
-        uint64_t phaseEndCycle; //phase 1 end clock
+  uint64_t curCycle;       // phase 1 clock
+  uint64_t phaseEndCycle;  // phase 1 end clock
 
-        CoreRecorder cRec;
+  CoreRecorder cRec;
 
-    public:
-        TimingCore(FilterCache* _l1i, FilterCache* _l1d, uint32_t domain, g_string& _name);
-        void initStats(AggregateStat* parentStat);
+ public:
+  TimingCore(FilterCache* _l1i, FilterCache* _l1d, uint32_t domain,
+             g_string& _name);
+  void initStats(AggregateStat* parentStat);
 
-        uint64_t getInstrs() const {return instrs;}
-        uint64_t getPhaseCycles() const;
-        uint64_t getCycles() const {return cRec.getUnhaltedCycles(curCycle);}
+  uint64_t getInstrs() const { return instrs; }
+  uint64_t getPhaseCycles() const;
+  uint64_t getCycles() const { return cRec.getUnhaltedCycles(curCycle); }
 
-        void contextSwitch(int32_t gid);
-        virtual void join();
-        virtual void leave();
+  void contextSwitch(int32_t gid);
+  virtual void join();
+  virtual void leave();
 
-        InstrFuncPtrs GetFuncPtrs();
+  InstrFuncPtrs GetFuncPtrs();
 
-        //Contention simulation interface
-        inline EventRecorder* getEventRecorder() {return cRec.getEventRecorder();}
-        void cSimStart() {curCycle = cRec.cSimStart(curCycle);}
-        void cSimEnd() {curCycle = cRec.cSimEnd(curCycle);}
+  // Contention simulation interface
+  inline EventRecorder* getEventRecorder() { return cRec.getEventRecorder(); }
+  void cSimStart() { curCycle = cRec.cSimStart(curCycle); }
+  void cSimEnd() { curCycle = cRec.cSimEnd(curCycle); }
 
-    private:
-        inline void loadAndRecord(Address addr, Address pc);
-        inline void storeAndRecord(Address addr, Address pc);
-        inline void bblAndRecord(Address bblAddr, BblInfo* bblInstrs);
-        inline void record(uint64_t startCycle);
+ private:
+  inline void loadAndRecord(Address addr, Address pc);
+  inline void storeAndRecord(Address addr, Address pc);
+  inline void bblAndRecord(Address bblAddr, BblInfo* bblInstrs);
+  inline void record(uint64_t startCycle);
 
-        static void LoadAndRecordFunc(THREADID tid, ADDRINT addr, ADDRINT pc);
-        static void StoreAndRecordFunc(THREADID tid, ADDRINT addr, ADDRINT pc);
-        static void BblAndRecordFunc(THREADID tid, ADDRINT bblAddr, BblInfo* bblInfo);
-        static void PredLoadAndRecordFunc(THREADID tid, ADDRINT addr, ADDRINT pc, BOOL pred);
-        static void PredStoreAndRecordFunc(THREADID tid, ADDRINT addr, ADDRINT pc, BOOL pred);
+  static void LoadAndRecordFunc(THREADID tid, ADDRINT addr, ADDRINT pc);
+  static void StoreAndRecordFunc(THREADID tid, ADDRINT addr, ADDRINT pc);
+  static void BblAndRecordFunc(THREADID tid, ADDRINT bblAddr, BblInfo* bblInfo);
+  static void PredLoadAndRecordFunc(THREADID tid, ADDRINT addr, ADDRINT pc,
+                                    BOOL pred);
+  static void PredStoreAndRecordFunc(THREADID tid, ADDRINT addr, ADDRINT pc,
+                                     BOOL pred);
 
-        static void BranchFunc(THREADID, ADDRINT, BOOL, ADDRINT, ADDRINT) {}
+  static void BranchFunc(THREADID, ADDRINT, BOOL, ADDRINT, ADDRINT, INS_CAT) {}
 } ATTR_LINE_ALIGNED;
 
 #endif  // TIMING_CORE_H_

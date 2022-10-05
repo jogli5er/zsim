@@ -28,75 +28,88 @@
 #define CORE_H_
 
 #include <stdint.h>
+
 #include "decoder.h"
 #include "g_std/g_string.h"
 #include "stats.h"
 
 struct BblInfo {
-    uint32_t instrs;
-    uint32_t bytes;
-    bool preserve; // Whether or not to delete oooBbl after it is used
-    DynBbl oooBbl[0]; // 0 bytes, but will be 1-sized when we have an element (and that element has variable size as well)
+  uint32_t instrs;
+  uint32_t bytes;
+  bool preserve;     // Whether or not to delete oooBbl after it is used
+  DynBbl oooBbl[0];  // 0 bytes, but will be 1-sized when we have an element
+                     // (and that element has variable size as well)
 };
 
 struct CoreProperties {
-    // Branch Predictor Properties, see ooo_core.h
-    uint32_t bp_nb; // L1 predictor nr entries
-    uint32_t bp_hb; // History bits
-    uint32_t bp_lb; // L2 predictor nr entries
+  // Branch Predictor Properties, see ooo_core.h
+  uint32_t bp_nb;  // L1 predictor nr entries
+  uint32_t bp_hb;  // History bits
+  uint32_t bp_lb;  // L2 predictor nr entries
 
-    CoreProperties (uint32_t _bp_nb, uint32_t _bp_hb, uint32_t _bp_lb) :
-        bp_nb(_bp_nb), bp_hb(_bp_hb), bp_lb(_bp_lb) {};
+  CoreProperties(uint32_t _bp_nb, uint32_t _bp_hb, uint32_t _bp_lb)
+      : bp_nb(_bp_nb), bp_hb(_bp_hb), bp_lb(_bp_lb){};
 };
 
 /* Analysis function pointer struct
- * As an artifact of having a shared code cache, we need these to be the same for different core types.
+ * As an artifact of having a shared code cache, we need these to be the same
+ * for different core types.
  */
-struct InstrFuncPtrs {  // NOLINT(whitespace)
-    void (*loadPtr)(THREADID, ADDRINT, ADDRINT);  //TID, Addr, PC
-    void (*storePtr)(THREADID, ADDRINT, ADDRINT);  //TID, Addr, PC
-    void (*bblPtr)(THREADID, ADDRINT, BblInfo*);
-    void (*branchPtr)(THREADID, ADDRINT, BOOL, ADDRINT, ADDRINT);
-    // Same as load/store functions, but last arg indicated whether op is executing
-    void (*predLoadPtr)(THREADID, ADDRINT, ADDRINT, BOOL);  //TID, Addr, PC, executing
-    void (*predStorePtr)(THREADID, ADDRINT, ADDRINT, BOOL);  //TID, Addr, PC, executing
-    uint64_t type;
-    uint64_t pad[1];
-    //NOTE: By having the struct be a power of 2 bytes, indirect calls are simpler (w/ gcc 4.4 -O3, 6->5 instructions, and those instructions are simpler)
+struct InstrFuncPtrs {                           // NOLINT(whitespace)
+  void (*loadPtr)(THREADID, ADDRINT, ADDRINT);   // TID, Addr, PC
+  void (*storePtr)(THREADID, ADDRINT, ADDRINT);  // TID, Addr, PC
+  void (*bblPtr)(THREADID, ADDRINT, BblInfo*);
+  void (*branchPtr)(THREADID, ADDRINT, BOOL, ADDRINT, ADDRINT, INS_CAT);
+  // Same as load/store functions, but last arg indicated whether op is
+  // executing
+  void (*predLoadPtr)(THREADID, ADDRINT, ADDRINT,
+                      BOOL);  // TID, Addr, PC, executing
+  void (*predStorePtr)(THREADID, ADDRINT, ADDRINT,
+                       BOOL);  // TID, Addr, PC, executing
+  uint64_t type;
+  uint64_t pad[1];
+  // NOTE: By having the struct be a power of 2 bytes, indirect calls are
+  // simpler (w/ gcc 4.4 -O3, 6->5 instructions, and those instructions are
+  // simpler)
 };
 
-
-//TODO: Switch type to an enum by using sizeof macros...
+// TODO: Switch type to an enum by using sizeof macros...
 #define FPTR_ANALYSIS (0L)
 #define FPTR_JOIN (1L)
 #define FPTR_NOP (2L)
 #define FPTR_RETRY (3L)
 
-//Generic core class
+// Generic core class
 
 class Core : public GlobAlloc {
-    private:
-        uint64_t lastUpdateCycles;
-        uint64_t lastUpdateInstrs;
+ private:
+  uint64_t lastUpdateCycles;
+  uint64_t lastUpdateInstrs;
 
-    protected:
-        g_string name;
+ protected:
+  g_string name;
 
-    public:
-        explicit Core(g_string& _name) : lastUpdateCycles(0), lastUpdateInstrs(0), name(_name) {}
+ public:
+  explicit Core(g_string& _name)
+      : lastUpdateCycles(0), lastUpdateInstrs(0), name(_name) {}
 
-        virtual uint64_t getInstrs() const = 0; // typically used to find out termination conditions or dumps
-        virtual uint64_t getPhaseCycles() const = 0; // used by RDTSC faking --- we need to know how far along we are in the phase, but not the total number of phases
-        virtual uint64_t getCycles() const = 0;
+  virtual uint64_t getInstrs()
+      const = 0;  // typically used to find out termination conditions or dumps
+  virtual uint64_t getPhaseCycles()
+      const = 0;  // used by RDTSC faking --- we need to know how far along we
+                  // are in the phase, but not the total number of phases
+  virtual uint64_t getCycles() const = 0;
 
-        virtual void initStats(AggregateStat* parentStat) = 0;
-        virtual void contextSwitch(int32_t gid) = 0; //gid == -1 means descheduled, otherwise this is the new gid
+  virtual void initStats(AggregateStat* parentStat) = 0;
+  virtual void contextSwitch(int32_t gid) = 0;  // gid == -1 means descheduled,
+                                                // otherwise this is the new gid
 
-        //Called by scheduler on every leave and join action, before barrier methods are called
-        virtual void leave() {}
-        virtual void join() {}
+  // Called by scheduler on every leave and join action, before barrier methods
+  // are called
+  virtual void leave() {}
+  virtual void join() {}
 
-        virtual InstrFuncPtrs GetFuncPtrs() = 0;
+  virtual InstrFuncPtrs GetFuncPtrs() = 0;
 };
 
 #endif  // CORE_H_

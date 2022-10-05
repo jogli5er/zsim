@@ -27,7 +27,7 @@
 #ifndef SIMPLE_CORE_H_
 #define SIMPLE_CORE_H_
 
-//A simple core model with IPC=1 except on memory accesses
+// A simple core model with IPC=1 except on memory accesses
 
 #include "core.h"
 #include "memory_hierarchy.h"
@@ -36,41 +36,42 @@
 class FilterCache;
 
 class SimpleCore : public Core {
-    protected:
-        FilterCache* l1i;
-        FilterCache* l1d;
+ protected:
+  FilterCache* l1i;
+  FilterCache* l1d;
 
-        uint64_t instrs;
-        uint64_t curCycle;
-        uint64_t phaseEndCycle; //next stopping point
-        uint64_t haltedCycles;
+  uint64_t instrs;
+  uint64_t curCycle;
+  uint64_t phaseEndCycle;  // next stopping point
+  uint64_t haltedCycles;
 
-    public:
-        SimpleCore(FilterCache* _l1i, FilterCache* _l1d, g_string& _name);
-        void initStats(AggregateStat* parentStat);
+ public:
+  SimpleCore(FilterCache* _l1i, FilterCache* _l1d, g_string& _name);
+  void initStats(AggregateStat* parentStat);
 
-        uint64_t getInstrs() const {return instrs;}
-        uint64_t getPhaseCycles() const;
-        uint64_t getCycles() const {return curCycle - haltedCycles;}
+  uint64_t getInstrs() const { return instrs; }
+  uint64_t getPhaseCycles() const;
+  uint64_t getCycles() const { return curCycle - haltedCycles; }
 
-        void contextSwitch(int32_t gid);
-        virtual void join();
+  void contextSwitch(int32_t gid);
+  virtual void join();
 
-        InstrFuncPtrs GetFuncPtrs();
+  InstrFuncPtrs GetFuncPtrs();
 
-    protected:
-        //Simulation functions
-        inline void load(Address addr, Address pc);
-        inline void store(Address addr, Address pc);
-        inline void bbl(Address bblAddr, BblInfo* bblInstrs);
+ protected:
+  // Simulation functions
+  inline void load(Address addr, Address pc);
+  inline void store(Address addr, Address pc);
+  inline void bbl(Address bblAddr, BblInfo* bblInstrs);
 
-        static void LoadFunc(THREADID tid, ADDRINT addr, ADDRINT pc);
-        static void StoreFunc(THREADID tid, ADDRINT addr, ADDRINT pc);
-        static void BblFunc(THREADID tid, ADDRINT bblAddr, BblInfo* bblInfo);
-        static void PredLoadFunc(THREADID tid, ADDRINT addr, ADDRINT pc, BOOL pred);
-        static void PredStoreFunc(THREADID tid, ADDRINT addr, ADDRINT pc, BOOL pred);
+  static void LoadFunc(THREADID tid, ADDRINT addr, ADDRINT pc);
+  static void StoreFunc(THREADID tid, ADDRINT addr, ADDRINT pc);
+  static void BblFunc(THREADID tid, ADDRINT bblAddr, BblInfo* bblInfo);
+  static void PredLoadFunc(THREADID tid, ADDRINT addr, ADDRINT pc, BOOL pred);
+  static void PredStoreFunc(THREADID tid, ADDRINT addr, ADDRINT pc, BOOL pred);
 
-        static void BranchFunc(THREADID, ADDRINT, BOOL, ADDRINT, ADDRINT) {}
-}  ATTR_LINE_ALIGNED; //This needs to take up a whole cache line, or false sharing will be extremely frequent
+  static void BranchFunc(THREADID, ADDRINT, BOOL, ADDRINT, ADDRINT, INS_CAT) {}
+} ATTR_LINE_ALIGNED;  // This needs to take up a whole cache line, or false
+                      // sharing will be extremely frequent
 
 #endif  // SIMPLE_CORE_H_

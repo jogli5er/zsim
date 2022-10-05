@@ -27,40 +27,42 @@
 #ifndef NULL_CORE_H_
 #define NULL_CORE_H_
 
-//A core model with IPC=1 and no hooks into the memory hierarchy. Useful to isolate threads that need to be run for simulation purposes.
+// A core model with IPC=1 and no hooks into the memory hierarchy. Useful to
+// isolate threads that need to be run for simulation purposes.
 
 #include "core.h"
 #include "pad.h"
 
 class NullCore : public Core {
-    protected:
-        uint64_t instrs;
-        uint64_t curCycle;
-        uint64_t phaseEndCycle; //next stopping point
+ protected:
+  uint64_t instrs;
+  uint64_t curCycle;
+  uint64_t phaseEndCycle;  // next stopping point
 
-    public:
-        explicit NullCore(g_string& _name);
-        void initStats(AggregateStat* parentStat);
+ public:
+  explicit NullCore(g_string& _name);
+  void initStats(AggregateStat* parentStat);
 
-        uint64_t getInstrs() const {return instrs;}
-        uint64_t getPhaseCycles() const;
-        uint64_t getCycles() const {return instrs; /*IPC=1*/ }
+  uint64_t getInstrs() const { return instrs; }
+  uint64_t getPhaseCycles() const;
+  uint64_t getCycles() const { return instrs; /*IPC=1*/ }
 
-        void contextSwitch(int32_t gid);
-        virtual void join();
+  void contextSwitch(int32_t gid);
+  virtual void join();
 
-        InstrFuncPtrs GetFuncPtrs();
+  InstrFuncPtrs GetFuncPtrs();
 
-    protected:
-        inline void bbl(BblInfo* bblInstrs);
+ protected:
+  inline void bbl(BblInfo* bblInstrs);
 
-        static void LoadFunc(THREADID tid, ADDRINT addr, ADDRINT pc);
-        static void StoreFunc(THREADID tid, ADDRINT addr, ADDRINT pc);
-        static void BblFunc(THREADID tid, ADDRINT bblAddr, BblInfo* bblInfo);
-        static void PredLoadFunc(THREADID tid, ADDRINT addr, ADDRINT pc, BOOL pred);
-        static void PredStoreFunc(THREADID tid, ADDRINT addr, ADDRINT pc, BOOL pred);
+  static void LoadFunc(THREADID tid, ADDRINT addr, ADDRINT pc);
+  static void StoreFunc(THREADID tid, ADDRINT addr, ADDRINT pc);
+  static void BblFunc(THREADID tid, ADDRINT bblAddr, BblInfo* bblInfo);
+  static void PredLoadFunc(THREADID tid, ADDRINT addr, ADDRINT pc, BOOL pred);
+  static void PredStoreFunc(THREADID tid, ADDRINT addr, ADDRINT pc, BOOL pred);
 
-        static void BranchFunc(THREADID, ADDRINT, BOOL, ADDRINT, ADDRINT) {}
-} ATTR_LINE_ALIGNED; //This needs to take up a whole cache line, or false sharing will be extremely frequent
+  static void BranchFunc(THREADID, ADDRINT, BOOL, ADDRINT, ADDRINT, INS_CAT) {}
+} ATTR_LINE_ALIGNED;  // This needs to take up a whole cache line, or false
+                      // sharing will be extremely frequent
 
 #endif  // NULL_CORE_H_

@@ -458,6 +458,7 @@ class OOOCore : public Core {
   bool branchTaken;
   Address branchTakenNpc;
   Address branchNotTakenNpc;
+  xed_category_enum_t branchType;
 
   uint64_t decodeCycle;
   CycleQueue<28> uopQueue;  // models issue queue
@@ -467,7 +468,7 @@ class OOOCore : public Core {
 
 #ifdef OOO_STALL_STATS
   Counter profFetchStalls, profDecodeStalls, profIssueStalls, profRFReadStalls,
-      profRobStalls, profRRStalls, profMispredStalls;
+      profRobStalls, profRRStalls, profMispredStalls, profTakenBranches;
   VectorCounter lowBits, disp;
 #endif
 
@@ -533,7 +534,7 @@ class OOOCore : public Core {
   inline void predFalseMemOp();
 
   inline void branch(Address pc, bool taken, Address takenNpc,
-                     Address notTakenNpc);
+                     Address notTakenNpc, INS_CAT category);
 
   inline void bbl(Address bblAddr, BblInfo* bblInfo);
 
@@ -543,7 +544,7 @@ class OOOCore : public Core {
   static void PredStoreFunc(THREADID tid, ADDRINT addr, ADDRINT pc, BOOL pred);
   static void BblFunc(THREADID tid, ADDRINT bblAddr, BblInfo* bblInfo);
   static void BranchFunc(THREADID tid, ADDRINT pc, BOOL taken, ADDRINT takenNpc,
-                         ADDRINT notTakenNpc);
+                         ADDRINT notTakenNpc, INS_CAT category);
 } ATTR_LINE_ALIGNED;  // Take up an int number of cache lines
 
 #endif  // OOO_CORE_H_

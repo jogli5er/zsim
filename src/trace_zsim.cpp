@@ -58,6 +58,13 @@
 const uint32_t END_TRACE_SIM = ~0x0;
 const uint32_t CONTENTION_THREAD = ~0x0 - 1;
 
+#define IS_BRANCH(inst)                                             \
+  (xed_decoded_inst_get_category(inst) == XED_CATEGORY_COND_BR ||   \
+   xed_decoded_inst_get_category(inst) == XED_CATEGORY_UNCOND_BR || \
+   xed_decoded_inst_get_category(inst) == XED_CATEGORY_RET ||       \
+   xed_decoded_inst_get_category(inst) == XED_CATEGORY_SYSRET ||    \
+   xed_decoded_inst_get_category(inst) == XED_CATEGORY_CALL)
+
 /* Global Variables */
 GlobSimInfo *zinfo;
 pthread_t contention_thread;
@@ -374,15 +381,12 @@ void *simtrace(void *arg) {
           sim_mem_op(tid, &info);
         }
         if (likely(info.custom_op == CustomOp::NONE)) {
-          if (INS_Category(info.ins) == XED_CATEGORY_COND_BR) {
+          if (IS_BRANCH(it->ins)) {
             uint64_t fall_through_addr = bbl_pc + ce.size_bytes;
             fPtrs[tid].branchPtr(tid, it->pc, it->taken, it->target,
-                                 fall_through_addr);
+                                 fall_through_addr,
+                                 xed_decoded_inst_get_category(it->ins));
           }
-          std::cout << xed_category_enum_t2str(
-                           xed_decoded_inst_get_category(it->ins))
-                    << std::endl;
-          std::cout << "find exec" << std::endl;
         }
       }
     } else {  // Bbl is cached
@@ -407,17 +411,14 @@ void *simtrace(void *arg) {
         }
 
         if (likely(insi->custom_op == CustomOp::NONE)) {
-          if (INS_Category(insi->ins) == XED_CATEGORY_COND_BR) {
+          if (IS_BRANCH(insi->ins)) {
             uint64_t fall_through_addr = bbl_to_sim->first + size_bytes;
             // Check that the branch is the last instruction of the BBL
             assert(i + 1 == bbl_to_sim->second.nr_inst);
             fPtrs[tid].branchPtr(tid, insi->pc, insi->taken, insi->target,
-                                 fall_through_addr);
+                                 fall_through_addr,
+                                 xed_decoded_inst_get_category(insi->ins));
           }
-          std::cout << xed_category_enum_t2str(
-                           xed_decoded_inst_get_category(insi->ins))
-                    << std::endl;
-          std::cout << "find exec" << std::endl;
         }
 
         insi = reader->nextInstruction();
