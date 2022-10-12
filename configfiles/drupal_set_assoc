@@ -60,7 +60,7 @@ sys = {
             };
             latency = 3;
             #Next line prefetcher at L1 access
-            numLinesNLP = 1;
+            numLinesNLP = 0;
             #Perfect memory, all memory accesses (instructions) have L1 latency
             zeroLatencyCache = false;
         };

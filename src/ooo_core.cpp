@@ -344,7 +344,7 @@ inline void OOOCore::bbl(Address bblAddr, BblInfo* bblInfo) {
                 lineAddr, 0, curCycle, dispatchCycle, &cRec, uop->pc, true);
           } else {
             reqSatisfiedCycle =
-                l1d->load(addr, curCycle, dispatchCycle, uop->pc, &cRec);
+                l1d->load(addr, curCycle, dispatchCycle, uop->pc, &cRec, 0);
           }
         }
 
@@ -373,7 +373,7 @@ inline void OOOCore::bbl(Address bblAddr, BblInfo* bblInfo) {
         // Ignore the reported i-cache latency since the available cycle is
         // tracked and will be reflected upon fetch from the frontend.
         Address addr = loadAddrs[loadIdx++];
-        l1i->load(addr, curCycle, dispatchCycle, uop->pc, &cRec);
+        l1i->load(addr, curCycle, dispatchCycle, uop->pc, &cRec, 64);
         commitCycle = dispatchCycle + uop->lat;
       } break;
 
@@ -393,7 +393,7 @@ inline void OOOCore::bbl(Address bblAddr, BblInfo* bblInfo) {
 
         Address addr = storeAddrs[storeIdx++];
         uint64_t reqSatisfiedCycle =
-            l1d->store(addr, curCycle, dispatchCycle, uop->pc, &cRec);
+            l1d->store(addr, curCycle, dispatchCycle, uop->pc, &cRec, 0);
         // Fill the forwarding table
         fwdArray[(addr >> 2) & (FWD_ENTRIES - 1)].set(addr, reqSatisfiedCycle);
 
@@ -536,7 +536,7 @@ inline void OOOCore::bbl(Address bblAddr, BblInfo* bblInfo) {
     uint64_t reqCycle = fetchCycle;
     for (uint32_t i = 0; i < 5 * 64 / lineSize; i++) {
       uint64_t fetchLat = l1i->load(wrongPathAddr + lineSize * i, curCycle,
-                                    curCycle, 0 /*no PC*/, &cRec) -
+                                    curCycle, 0 /*no PC*/, &cRec, lineSize) -
                           curCycle;
       uint64_t respCycle = reqCycle + fetchLat;
       if (respCycle > lastCommitCycle) {
@@ -557,15 +557,18 @@ inline void OOOCore::bbl(Address bblAddr, BblInfo* bblInfo) {
 
   // Simulate current bbl ifetch
   Address endAddr = bblAddr + bblInfo->bytes;
-  for (Address fetchAddr = bblAddr; fetchAddr < endAddr;
-       fetchAddr += lineSize) {
+  uint8_t size = 64;
+  for (Address fetchAddr = bblAddr; fetchAddr < endAddr; fetchAddr += size) {
     // The Nehalem frontend fetches instructions in 16-byte-wide accesses.
     // Do not model fetch throughput limit here, decoder-generated stalls
-    // already include it We always call fetches with curCycle to avoid
+    // already include it. We always call fetches with curCycle to avoid
     // upsetting the weave models (but we could move to a fetch-centric recorder
     // to avoid this)
+
+    size = Core::getSizeForCurrentLine(bblAddr, fetchAddr, bblInfo->bytes);
     uint64_t fetchLat =
-        l1i->load(fetchAddr, curCycle, curCycle, 0 /*no PC*/, &cRec) - curCycle;
+        l1i->load(fetchAddr, curCycle, curCycle, 0 /*no PC*/, &cRec, size) -
+        curCycle;
     fetchCycle += fetchLat;
   }
 

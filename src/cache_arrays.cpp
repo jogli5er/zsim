@@ -30,6 +30,22 @@
 #include "repl_policies.h"
 #include "zsim.h"
 
+void set_accessed(uint64_t& mask, uint8_t lower, uint8_t upper) {
+  if (upper > 64) {
+    upper = 64;
+  }
+
+  uint64_t bitmask = 1;
+  for (uint8_t i = 0; i < lower; i++) {
+    bitmask = bitmask << 1;
+  }
+
+  for (uint8_t i = lower; i < upper; i++) {
+    mask |= bitmask;
+    bitmask = bitmask << 1;
+  }
+}
+
 /* Set-associative array implementation */
 
 SetAssocArray::SetAssocArray(uint32_t _numLines, uint32_t _assoc,
@@ -123,6 +139,9 @@ void SetAssocArray::initStats(AggregateStat* parentStat) {
 
   profHitDelayCycles.init("hitDelayCycles", "Delay cycles on an inflight hit");
   objStats->append(&profHitDelayCycles);
+  profCacheLineUsed.init("cacheLineUsedBytes",
+                         "Number of presences with n bytes accessed", 65);
+  objStats->append(&profCacheLineUsed);
   parentStat->append(objStats);
 }
 
@@ -147,7 +166,11 @@ int32_t SetAssocArray::lookup(const Address lineAddr, const MemReq* req,
       }
 
       if (updateReplacement && !req->prefetch) rp->update(id, req);
-
+      if (req->size > 0) {
+        Address baseAddress = lineAddr << (uint64_t)lineBits;
+        uint64_t offset = (req->vAddr - baseAddress);
+        set_accessed(array[id].accessMask, offset, offset + req->size);
+      }
       // cache hit, line is in the cache
       if (req->cycle >= array[id].availCycle) {
         *availCycle = req->cycle;
@@ -256,8 +279,46 @@ uint32_t SetAssocArray::preinsert(
   return candidate;
 }
 
+std::vector<uint8_t> get_block_sizes(const uint64_t& mask) {
+  std::vector<uint8_t> result;
+  uint8_t prev_bit = 0;
+  uint8_t current_bit = 0;
+  bool trailing = true;
+  uint8_t first = 0;
+  for (int byte = 0; byte < 64; byte++) {
+    current_bit = ((mask >> byte) & 0x1);
+    if (current_bit == 1 && trailing) {
+      trailing = false;
+      prev_bit = current_bit;
+      first = byte;
+      continue;
+    } else if (current_bit == 0 && trailing) {
+      continue;
+    }
+
+    // posedge/negedge kind of analysis
+    if (current_bit == 0 && prev_bit == 1) {
+      result.push_back(byte - first);
+    } else if (current_bit == 1 && prev_bit == 0) {
+      first = byte;
+    }
+    prev_bit = current_bit;
+  }
+
+  if (prev_bit == 1 && current_bit == 1) {
+    result.push_back(64 - first);
+  }
+  return result;
+}
+
 void SetAssocArray::postinsert(const Address lineAddr, const MemReq* req,
                                uint32_t candidate, uint64_t respCycle) {
+  if (array[candidate].accessMask != 0) {
+    std::vector<uint8_t> blockSizes =
+        get_block_sizes(array[candidate].accessMask);
+    for (const uint8_t size : blockSizes) profCacheLineUsed.inc(size);
+  }
+  array[candidate].accessMask = 0;  // reset for later use
   rp->replaced(candidate);
   if (isHWPrefetch(req)) {
     profPrefPostInsert.inc();
@@ -281,6 +342,7 @@ void SetAssocArray::postinsert(const Address lineAddr, const MemReq* req,
   array[candidate].availCycle = respCycle;
   array[candidate].startCycle = req->cycle;
   array[candidate].pc = req->pc;
+  array[candidate].accessMask = 0;  // reset for later use
   rp->update(candidate, req);
 }
 
@@ -391,10 +453,10 @@ uint32_t ZArray::preinsert(const Address lineAddr, const MemReq* req,
                 all_valid &= (array[lineId].addr != 0);
             }
 #endif
-      // But this compiles as a branch and ILP sucks (this data-dependent branch
-      // is long-latency and mispredicted often) Logically though, this is just
-      // checking for whether we're revisiting ourselves, so we can eliminate
-      // the branch as follows:
+      // But this compiles as a branch and ILP sucks (this data-dependent
+      // branch is long-latency and mispredicted often) Logically though, this
+      // is just checking for whether we're revisiting ourselves, so we can
+      // eliminate the branch as follows:
       candidates[numCandidates].set(pos, lineId, (int32_t)fringeStart);
       all_valid &=
           (array[lineId].addr != 0);  // no problem, if lineId == fringeId the
@@ -406,8 +468,8 @@ uint32_t ZArray::preinsert(const Address lineAddr, const MemReq* req,
     fringeStart++;
   }
 
-  // Get best candidate (NOTE: This could be folded in the code above, but it's
-  // messy since we can expand more than zassoc elements)
+  // Get best candidate (NOTE: This could be folded in the code above, but
+  // it's messy since we can expand more than zassoc elements)
   assert(!all_valid || numCandidates >= cands);
   numCandidates = (numCandidates > cands) ? cands : numCandidates;
 
@@ -455,7 +517,8 @@ void ZArray::postinsert(const Address lineAddr, const MemReq* req,
   assert(lookupArray[swapArray[0]] == candidate);
   for (uint32_t i = 0; i < swapArrayLen - 1; i++) {
     // info("Moving position %d (lineId %d) <- %d (lineId %d)", swapArray[i],
-    // lookupArray[swapArray[i]], swapArray[i+1], lookupArray[swapArray[i+1]]);
+    // lookupArray[swapArray[i]], swapArray[i+1],
+    // lookupArray[swapArray[i+1]]);
     lookupArray[swapArray[i]] = lookupArray[swapArray[i + 1]];
   }
   lookupArray[swapArray[swapArrayLen - 1]] =

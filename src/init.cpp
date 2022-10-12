@@ -607,7 +607,7 @@ CacheGroup* BuildCacheGroup(Config& config, const string& name,
       uint32_t domain =
           (i * banks + j) * zinfo->numDomains /
           (caches * banks);  //(banks > 1)? nextDomain() : (i*banks +
-                             //j)*zinfo->numDomains/(caches*banks);
+                             // j)*zinfo->numDomains/(caches*banks);
       cg[i][j] = BuildCacheBank(config, prefix, bankName, bankSize, isTerminal,
                                 domain);
     }
@@ -1134,8 +1134,10 @@ static void PostInitStats(bool perProcessDir, Config& config) {
       0 /* no aggregation, this is just 1 record */, zinfo->skipStatsVectors,
       true);  // don't dump a first sample.
   StatsBackend* textStats = new TextBackend(statsFile, zinfo->rootStat);
+  StatsBackend* csvStats = new CsvBackend(statsFile, zinfo->rootStat);
   zinfo->statsBackends->push_back(compactStats);
   zinfo->statsBackends->push_back(textStats);
+  zinfo->statsBackends->push_back(csvStats);
 }
 
 static void InitGlobalStats() {

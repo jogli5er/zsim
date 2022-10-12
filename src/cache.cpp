@@ -76,6 +76,9 @@ uint64_t Cache::access(MemReq& req) {
     bool updateReplacement = (req.type == GETS) || (req.type == GETX);
     uint64_t availCycle;  // cycle the block is/will be available (valid only if
                           // MESI state is not I)
+    if (name == "l1i-0" && req.size < 1) {
+      std::cout << "found a bad apple" << std::endl;
+    }
     int32_t lineId =
         array->lookup(req.lineAddr, &req, updateReplacement, &availCycle);
     if (lineId != -1 && cc->isValid(lineId)) {

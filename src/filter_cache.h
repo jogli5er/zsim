@@ -126,7 +126,8 @@ class FilterCache : public Cache {
     parentStat->append(cacheStat);
   }
 
-  inline uint64_t load(Address vAddr, uint64_t curCycle, Address pc) {
+  inline uint64_t load(Address vAddr, uint64_t curCycle, Address pc,
+                       uint8_t size) {
     Address vLineAddr = vAddr >> lineBits;
     uint32_t idx = vLineAddr & setMask;
     // uint64_t availCycle =
@@ -142,11 +143,12 @@ class FilterCache : public Cache {
     //   fGETSHit++;
     //   return MAX(curCycle + accLat, availCycle);
     // } else {
-    return replace(vLineAddr, idx, true, curCycle, pc);
+    return replace(vAddr, idx, true, curCycle, pc, size);
     //}
   }
 
-  inline uint64_t store(Address vAddr, uint64_t curCycle, Address pc) {
+  inline uint64_t store(Address vAddr, uint64_t curCycle, Address pc,
+                        uint8_t size) {
     Address vLineAddr = vAddr >> lineBits;
     uint32_t idx = vLineAddr & setMask;
     // uint64_t availCycle =
@@ -161,19 +163,22 @@ class FilterCache : public Cache {
     //   // forwarding
     //   return MAX(curCycle + accLat, availCycle);
     // } else {
-    return replace(vLineAddr, idx, false, curCycle, pc);
+    return replace(vAddr, idx, false, curCycle, pc, size);
     //}
   }
 
-  uint64_t replace(Address vLineAddr, uint32_t idx, bool isLoad,
-                   uint64_t curCycle, Address pc) {
+  uint64_t replace(Address vAddr, uint32_t idx, bool isLoad, uint64_t curCycle,
+                   Address pc, uint8_t size) {
     // assert(prefetchQueue.empty());
+    Address vLineAddr = vAddr >> lineBits;
     Address pLineAddr = procMask | vLineAddr;
     MESIState dummyState = MESIState::I;
     futex_lock(&filterLock);
-    MemReq req = {pc,          pLineAddr, isLoad ? GETS : GETX, 0,
-                  &dummyState, curCycle,  &filterLock,          dummyState,
-                  srcId,       reqFlags};
+    MemReq req = {pc,          pLineAddr,   isLoad ? GETS : GETX,
+                  0,           &dummyState, curCycle,
+                  &filterLock, dummyState,  srcId,
+                  reqFlags,    0,           vAddr,
+                  size};
     uint64_t respCycle = access(req);
 
     // Due to the way we do the locking, at this point the old address might be

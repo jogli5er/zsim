@@ -89,6 +89,15 @@ class Core : public GlobAlloc {
  protected:
   g_string name;
 
+  virtual uint8_t getSizeForCurrentLine(uint64_t firstAddress,
+                                        uint64_t fetchAddr,
+                                        uint32_t accessSize) {
+    accessSize -= (fetchAddr - firstAddress);
+    uint32_t offset =
+        (((fetchAddr + 64) >> 6) << 6) - fetchAddr + 1;  // inclusive fetchAddr
+    return std::min(accessSize, offset);
+  }
+
  public:
   explicit Core(g_string& _name)
       : lastUpdateCycles(0), lastUpdateInstrs(0), name(_name) {}

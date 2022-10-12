@@ -1245,6 +1245,8 @@ static void PostInitStats(bool perProcessDir, Config& config) {
   StatsBackend* textStats = new TextBackend(statsFile, zinfo->rootStat);
   zinfo->statsBackends->push_back(compactStats);
   zinfo->statsBackends->push_back(textStats);
+  StatsBackend* csvStats = new CsvBackend(statsFile, zinfo->rootStat);
+  zinfo->statsBackends->push_back(csvStats);
 }
 
 static void InitGlobalStats() {

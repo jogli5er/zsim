@@ -40,6 +40,7 @@ traceSrcs = [
     "stats_filter.cpp",
     "table_prefetcher.cpp",
     "text_stats.cpp",
+    "csv_stats.cpp",
     "timing_cache.cpp",
     "timing_core.cpp",
     "timing_event.cpp",

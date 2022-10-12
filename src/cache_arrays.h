@@ -39,11 +39,18 @@ struct AddrCycle {
       startCycle;  // start cycle of the memory req that inserted this block
   bool prefetch;
   uint64_t pc;
+  uint64_t accessMask;
 };
 
 struct AddrCycleVcl : public AddrCycle {
   uint8_t startOffset;
   uint8_t blockSize;
+  Address addr;  // matches address of a default (64B) line/block
+  uint64_t availCycle;
+  uint64_t startCycle;
+  bool prefetch;
+  uint64_t pc;
+  uint64_t accessMask;
 };
 
 /* General interface of a cache array. The array is a fixed-size associative
@@ -120,6 +127,7 @@ class SetAssocArray : public CacheArray {
   Counter profPrefNotInCache;
   Counter profPrefPostInsert;
   Counter profPrefReplacePref;
+  VectorCounter profCacheLineUsed;
 
  public:
   SetAssocArray(uint32_t _numLines, uint32_t _assoc, ReplPolicy* _rp,
