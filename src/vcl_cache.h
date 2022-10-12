@@ -45,13 +45,14 @@ class VCLCache : public Cache {
 
  public:
   VCLCache(uint32_t _numSets, std::vector<uint8_t> way_sizes, CC* _cc,
-           CacheArray* _array, ReplPolicy* _rp, uint32_t _accLat,
+           VCLCacheArray* _array, ReplPolicy* _rp, uint32_t _accLat,
            uint32_t _invLat, const g_string& _name)
       : Cache(way_sizes.size(), _cc, _array, _rp, _accLat, _invLat, _name) {
     numSets = _numSets;
     setMask = numSets - 1;
     srcId = -1;
     reqFlags = 0;
+    accLat = _accLat;
   }
   void setSourceId(uint32_t id) { srcId = id; }
 

@@ -298,7 +298,8 @@ std::vector<uint8_t> get_block_sizes(const uint64_t& mask) {
 
     // posedge/negedge kind of analysis
     if (current_bit == 0 && prev_bit == 1) {
-      result.push_back(byte - first);
+      uint8_t res = byte - first;
+      result.push_back(res);
     } else if (current_bit == 1 && prev_bit == 0) {
       first = byte;
     }
@@ -306,7 +307,8 @@ std::vector<uint8_t> get_block_sizes(const uint64_t& mask) {
   }
 
   if (prev_bit == 1 && current_bit == 1) {
-    result.push_back(64 - first);
+    uint8_t res = 64 - first;
+    result.push_back(res);
   }
   return result;
 }
