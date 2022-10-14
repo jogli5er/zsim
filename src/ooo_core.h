@@ -398,8 +398,8 @@ struct BblInfo;
 
 class OOOCore : public Core {
  private:
-  OOOFilterCache* l1i;
-  OOOFilterCache* l1d;
+  FilterCache* l1i;
+  FilterCache* l1d;
 
   uint64_t phaseEndCycle;  // next stopping point
 
@@ -490,7 +490,7 @@ class OOOCore : public Core {
   OOOCoreRecorder cRec;
 
  public:
-  OOOCore(OOOFilterCache* _l1i, OOOFilterCache* _l1d, g_string& _name,
+  OOOCore(FilterCache* _l1i, FilterCache* _l1d, g_string& _name,
           CoreProperties* properties);
 
   void initStats(AggregateStat* parentStat);

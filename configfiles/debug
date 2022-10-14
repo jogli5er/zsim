@@ -40,19 +40,21 @@ sys = {
         l1i = {
             caches = 1;
             size = 32768;
+            type = "VCL";
             array = {
-                type = "SetAssoc";
+                //type = "SetAssoc";
+                type = "VCL";
                 ways = 8;
-                // waySizes = [
-                //     8,
-                //     15,
-                //     23,
-                //     32,
-                //     48,
-                //     64,
-                //     64,
-                //     64
-                // ];
+                waySizes = [
+                    8,
+                    15,
+                    23,
+                    32,
+                    48,
+                    64,
+                    64,
+                    64
+                ];
             };
             repl :
             {
@@ -62,7 +64,7 @@ sys = {
             #Next line prefetcher at L1 access
             numLinesNLP = 0;
             #Perfect memory, all memory accesses (instructions) have L1 latency
-            zeroLatencyCache = false;
+            zeroLatencyCache = true;
         };
         l1d = {
             caches = 1;

@@ -126,7 +126,7 @@ class OOOFilterCache : public FilterCache {
 
   inline uint64_t store(Address vAddr, uint64_t curCycle,
                         uint64_t dispatchCycle, Address pc,
-                        OOOCoreRecorder* cRec, uint8_t size) {
+                        OOOCoreRecorder* cRec, uint8_t size) override {
     uint64_t respCycle = FilterCache::store(vAddr, dispatchCycle, pc, size);
     cRec->record(curCycle, dispatchCycle, respCycle);
 

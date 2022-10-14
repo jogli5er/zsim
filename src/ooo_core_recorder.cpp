@@ -33,8 +33,8 @@
 #define DEBUG_MSG(args...)
 //#define DEBUG_MSG(args...) info(args)
 
-#define TRACE_MSG(args...)
-//#define TRACE_MSG(args...) info(args)
+//#define TRACE_MSG(args...)
+#define TRACE_MSG(args...) info(args)
 
 class OOOIssueEvent : public TimingEvent {
  private:
@@ -99,7 +99,7 @@ class OOORespEvent : public TimingEvent {
       : TimingEvent(preDelay, 0, domain), cRec(_cRec) {}
 
   void simulate(uint64_t _startCycle) {
-    TRACE_MSG("Resp %ld startCycle %ld minStartCycle %ld", id, startCycle,
+    TRACE_MSG("Resp %ld startCycle %ld minStartCycle %ld", id, _startCycle,
               getMinStartCycle());
     cRec = nullptr;
     done(_startCycle);
@@ -275,7 +275,7 @@ void OOOCoreRecorder::recordAccess(uint64_t curCycle, uint64_t dispatchCycle,
         ->addChild(tr.startEvent, eventRecorder);
 
     // Link response
-    assert(respCycle >= tr.respCycle);
+    // assert(respCycle >= tr.respCycle);
     uint32_t downDelay = respCycle - tr.respCycle;
     uint64_t zllStartCycle = respCycle - gapCycles;
     OOORespEvent* respEvent =

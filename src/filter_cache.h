@@ -98,7 +98,17 @@ class FilterCache : public Cache {
     srcId = -1;
     reqFlags = 0;
   }
+  virtual uint64_t issuePrefetch(Address lineAddr, uint32_t skip,
+                                 uint64_t curCycle, uint64_t dispatchCycle,
+                                 OOOCoreRecorder* cRec, uint64_t pc,
+                                 bool isSW) = 0;
 
+  virtual inline uint64_t load(Address vAddr, uint64_t curCycle,
+                               uint64_t dispatchCycle, Address pc,
+                               OOOCoreRecorder* cRec, uint8_t size) = 0;
+  virtual inline uint64_t store(Address vAddr, uint64_t curCycle,
+                                uint64_t dispatchCycle, Address pc,
+                                OOOCoreRecorder* cRec, uint8_t size) = 0;
   void setSourceId(uint32_t id) { srcId = id; }
 
   uint32_t getSourceId() const { return srcId; }

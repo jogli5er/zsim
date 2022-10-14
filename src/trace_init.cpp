@@ -332,14 +332,14 @@ BaseCache* BuildCacheBank(Config& config, const string& prefix, g_string& name,
       cache = new TracingCache(numLines, cc, array, rp, accLat, invLat,
                                traceFile, name);
     } else if (type == "VCL") {
-      cache =
-          new VCLCache(numLines, waySizes, cc, array, rp, accLat, invLat, name);
+      cache = new VCLCache(numLines, waySizes, cc, (VCLCacheArray*)array, rp,
+                           accLat, invLat, name);
     } else {
       panic("Invalid cache type %s", type.c_str());
     }
   } else {
     // Filter cache optimization
-    if (type != "Simple")
+    if (type != "Simple" && type != "VCL")
       panic("Terminal cache %s can only have type == Simple", name.c_str());
     if ((arrayType != "SetAssoc" && arrayType != "VCL") || hashType != "None" ||
         replType != "LRU")
@@ -360,10 +360,16 @@ BaseCache* BuildCacheBank(Config& config, const string& prefix, g_string& name,
     bool var_degree = config.get<bool>(prefix + "variable_degree", false);
     g_string pref_kernels_file =
         config.get<const char*>(prefix + "pref_kernels", "");
-    cache = new OOOFilterCache(numSets, numLines, cc, array, rp, latency,
-                               invLat, name, numLinesNLP, zeroLatencyCache,
-                               pref_deg, pref_simple, pref_complex, limit_pref,
-                               var_degree, pref_kernels_file);
+    if (type == "VCL") {
+      assert_msg(arrayType == type, "VCL Cache requires also a VCL array type");
+      cache = new VCLCache(numSets, waySizes, cc, (VCLCacheArray*)array, rp,
+                           latency, invLat, name);
+    } else {
+      cache = new OOOFilterCache(numSets, numLines, cc, array, rp, latency,
+                                 invLat, name, numLinesNLP, zeroLatencyCache,
+                                 pref_deg, pref_simple, pref_complex,
+                                 limit_pref, var_degree, pref_kernels_file);
+    }
   }
 
 #if 0
@@ -1020,8 +1026,19 @@ static void InitSystem(Config& config) {
                 "more cores to it",
                 name.c_str(), icache.c_str(), igroup.size());
           }
-          OOOFilterCache* ic =
-              dynamic_cast<OOOFilterCache*>(igroup[assignedCaches[icache]][0]);
+          string icache_type = config.get<const char*>(
+              ("sys.caches." + icache + ".type"), "Simple");
+
+          string dcache_type = config.get<const char*>(
+              ("sys.caches." + dcache + ".type"), "Simple");
+          // TODO: Fix for VCL
+          FilterCache* ic;
+          if (icache_type == "VCL") {
+            ic = dynamic_cast<VCLCache*>(igroup[assignedCaches[icache]][0]);
+          } else {
+            ic = dynamic_cast<OOOFilterCache*>(
+                igroup[assignedCaches[icache]][0]);
+          }
           assert(ic);
           ic->setSourceId(coreIdx);
           ic->setFlags(MemReq::IFETCH | MemReq::NOEXCL);
@@ -1034,8 +1051,13 @@ static void InitSystem(Config& config) {
                 "more cores to it",
                 name.c_str(), dcache.c_str(), dgroup.size());
           }
-          OOOFilterCache* dc =
-              dynamic_cast<OOOFilterCache*>(dgroup[assignedCaches[dcache]][0]);
+          FilterCache* dc;
+          if (dcache_type == "VCL") {
+            dc = dynamic_cast<VCLCache*>(dgroup[assignedCaches[dcache]][0]);
+          } else {
+            dc = dynamic_cast<OOOFilterCache*>(
+                dgroup[assignedCaches[dcache]][0]);
+          }
           assert(dc);
           dc->setSourceId(coreIdx);
           dc->setType(FilterCache::Type::D);

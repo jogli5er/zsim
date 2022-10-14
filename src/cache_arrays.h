@@ -26,11 +26,14 @@
 #ifndef CACHE_ARRAYS_H_
 #define CACHE_ARRAYS_H_
 
+#define FULLMISS -1
+#define OUTOFRANGEMISS -2
+
 #include "g_std/g_multimap.h"
 #include "g_std/g_unordered_map.h"
 #include "memory_hierarchy.h"
 #include "stats.h"
-//#define MONITOR_MISS_PCS //Uncomment to enable monitoring of cache misses
+// #define MONITOR_MISS_PCS  // Uncomment to enable monitoring of cache misses
 
 struct AddrCycle {
   Address addr;         // block address
@@ -147,7 +150,7 @@ class SetAssocArray : public CacheArray {
   void initStats(AggregateStat* parentStat) override;
 };
 
-class VCLCacheArray : public CacheArray {
+class VCLCacheArray : public SetAssocArray {
  private:
   AddrCycleVcl* array;
   uint32_t* lookupArray;
@@ -159,27 +162,21 @@ class VCLCacheArray : public CacheArray {
   uint32_t assoc;
   uint32_t setMask;
 
-  Counter profPrefHit;
-  Counter profPrefEarlyMiss;
-  Counter profPrefLateMiss;
-  Counter profPrefLateTotalCycles;
-  Counter profPrefSavedCycles;
-  Counter profPrefInaccurateOOO;
-  Counter profHitDelayCycles;
-  Counter profPrefHitPref;
-  Counter profPrefAccesses;
-  Counter profPrefInCache;
-  Counter profPrefNotInCache;
-  Counter profPrefPostInsert;
-  Counter profPrefReplacePref;
+  Counter profPrefOutOfBoundsMiss;
 
  public:
   VCLCacheArray(uint32_t _num_lines, std::vector<uint8_t> ways, ReplPolicy* _rp,
                 HashFamily* _hf);
   virtual int32_t lookup(const Address lineAddr, const MemReq* req,
                          bool updateReplacement, uint64_t* availCycle) override;
+  virtual int32_t lookup(const Address lineAddr, const MemReq* req,
+                         bool updateReplacement, uint64_t* availCycle,
+                         int32_t* prevId);
   virtual uint32_t preinsert(const Address lineAddr, const MemReq* req,
                              Address* wbLineAddr) override;
+  virtual uint32_t preinsert(const Address lineAddr, const MemReq* req,
+                             Address* wbLineAddr,
+                             int32_t prevIndex); /*no-override*/
 
   virtual void postinsert(const Address lineAddr, const MemReq* req,
                           uint32_t lineId, uint64_t respCycle) override;

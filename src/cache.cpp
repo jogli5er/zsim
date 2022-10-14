@@ -163,7 +163,9 @@ uint64_t Cache::access(MemReq& req) {
   }
 
   cc->endAccess(req);
-
+  if (name == "l1i-0") {
+    respCycle = req.cycle + 1;  // Simulating huge l1i cache
+  }
   assert_msg(respCycle >= req.cycle,
              "[%s] resp < req? 0x%lx type %s childState %s, respCycle %ld "
              "reqCycle %ld",
