@@ -26,25 +26,10 @@
 #include "cache_arrays.h"
 
 #include "cache_prefetcher.h"
+#include "cacheline_access_bitmask_helpers.h"
 #include "hash.h"
 #include "repl_policies.h"
 #include "zsim.h"
-
-void set_accessed(uint64_t& mask, uint8_t lower, uint8_t upper) {
-  if (upper > 64) {
-    upper = 64;
-  }
-
-  uint64_t bitmask = 1;
-  for (uint8_t i = 0; i < lower; i++) {
-    bitmask = bitmask << 1;
-  }
-
-  for (uint8_t i = lower; i < upper; i++) {
-    mask |= bitmask;
-    bitmask = bitmask << 1;
-  }
-}
 
 /* Set-associative array implementation */
 
@@ -659,6 +644,7 @@ int32_t VCLCacheArray::lookup(const Address lineAddr, const MemReq* req,
     profPrefAccesses.inc();
   }
 
+  // TODO
   for (uint32_t id = first; id < first + assoc; id++) {
     if (array[id].addr == lineAddr) {
       // hit - proceed as we would normally
@@ -751,9 +737,23 @@ int32_t VCLCacheArray::lookup(const Address lineAddr, const MemReq* req,
   return -1;
 }
 
+// this is the preinsert for the buffer ways
 uint32_t VCLCacheArray::preinsert(const Address lineAddr, const MemReq* req,
                                   Address* wbLineAddr) {
-  return 0;
+  uint32_t set = hf->hash(0, lineAddr) & setMask;
+  uint32_t first = set * assoc;
+
+  uint32_t candidate;
+
+  for (const auto bufferCandidate : bufferWays) {
+    if (!array[first + bufferCandidate].fifoCtr--) {
+      candidate = first + bufferCandidate;
+    }
+  }
+
+  *wbLineAddr = array[candidate].addr;
+
+  return candidate;
 }
 
 /// @brief This preinsert is for cachelines that encountered an OUTOFBOUNDSMISS,
@@ -764,14 +764,63 @@ uint32_t VCLCacheArray::preinsert(const Address lineAddr, const MemReq* req,
 /// @param prevIndex The index of the previous place in the cache array. Might
 /// be used to initialize content. (could also be done depending on the
 /// replacement policies metadata)
+/// tuple: idx, wbAddr, start, end (start and end are of new block)
 /// @return The index of the new insert location
-uint32_t VCLCacheArray::preinsert(const Address lineAddr, const MemReq* req,
-                                  Address* wbLineAddr, int32_t prevIndex) {
-  return 0;
+std::vector<std::tuple<uint32_t, Address, uint8_t, uint8_t>>
+VCLCacheArray::preinsert(const Address lineAddr, const MemReq* req,
+                         Address* wbLineAddr, int32_t prevIndex) {
+  std::vector<std::pair<uint8_t, uint8_t>> consecutiveBlocks =
+      get_start_end_of_bitmask(array[prevIndex].accessMask);
+  uint32_t first = prevIndex - (prevIndex % waySizes.size());
+  uint8_t maxWay = waySizes.size() - bufferWays.size();
+  std::vector<std::tuple<uint32_t, Address, uint8_t, uint8_t>> candidates;
+  for (const auto block : consecutiveBlocks) {  // mostly 1 block
+    int size = block.second - block.first + 1;
+    uint32_t lineId =
+        ((VCLLRUReplPolicy<true>*)rp)
+            ->rank(req, SetAssocCands(first, first + waySizes.size() - 1), size,
+                   maxWay);
+    std::tuple<uint32_t, Address, uint8_t, uint8_t> entry(
+        lineId, array[lineId].addr, block.first, block.second);
+    candidates.push_back(entry);
+  }
+  return candidates;
 }
 
 void VCLCacheArray::postinsert(const Address lineAddr, const MemReq* req,
-                               uint32_t lineId, uint64_t respCycle) {}
+                               uint32_t lineId, uint64_t respCycle) {
+  if (array[lineId].accessMask != 0) {
+    std::vector<uint8_t> blockSizes = get_block_sizes(array[lineId].accessMask);
+    for (const uint8_t size : blockSizes) profCacheLineUsed.inc(size);
+  }
+  array[lineId].accessMask = 0;  // reset for later use
+  rp->replaced(lineId);
+  if (isHWPrefetch(req)) {
+    profPrefPostInsert.inc();
+  }
+
+  if (array[lineId].prefetch) {
+    profPrefEarlyMiss.inc();
+    if (isHWPrefetch(req)) {
+      profPrefReplacePref.inc();
+    }
+
+#ifdef MONITOR_MISS_PCS
+    // Gather Load PC miss stats
+    if (MONITORED_PCS) {
+      trackLoadPc(array[lineId].pc, early_addr, profEarlyPc, profEarlyPcNum);
+    }
+#endif
+  }
+  array[lineId].prefetch = isHWPrefetch(req);
+  array[lineId].addr = lineAddr;
+  array[lineId].availCycle = respCycle;
+  array[lineId].startCycle = req->cycle;
+  array[lineId].pc = req->pc;
+  array[lineId].accessMask = 0;  // reset for later use
+  rp->update(lineId, req);
+  // ((VCLCacheArray*)(0))->preinsert(lineAddr, req, 0);
+}
 
 void VCLCacheArray::initStats(AggregateStat* parent) {
   SetAssocArray::initStats(parent);

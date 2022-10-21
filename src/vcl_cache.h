@@ -55,7 +55,7 @@ class VCLCache : public FilterCache {
     setMask = numSets - 1;
     srcId = -1;
     reqFlags = 0;
-    numLinesNLP = 1;
+    numLinesNLP = 0;
     zeroLatencyCache = false;  // TODO: add setter if needed
 #ifdef TRACE_BASED
     pref_degree = 1;
@@ -74,14 +74,6 @@ class VCLCache : public FilterCache {
                                  OOOCoreRecorder* cRec, uint64_t pc,
                                  bool isSW) override;
 
-  virtual inline uint64_t load(Address vAddr, uint64_t curCycle,
-                               uint64_t dispatchCycle, Address pc,
-                               OOOCoreRecorder* cRec, uint8_t size) override;
-
-  virtual inline uint64_t store(Address vAddr, uint64_t curCycle,
-                                uint64_t dispatchCycle, Address pc,
-                                OOOCoreRecorder* cRec, uint8_t size) override;
-
   void setFlags(uint32_t flags) { reqFlags = flags; }
 
   enum class Type { D, I };
@@ -96,16 +88,29 @@ class VCLCache : public FilterCache {
     initCacheStats(cacheStat);
     parentStat->append(cacheStat);
   }
-  inline uint64_t load(Address vAddr, uint64_t curCycle, Address pc) override {
-    Address vLineAddr = vAddr >> lineBits;
-    uint32_t idx = vLineAddr & setMask;
-    return replace(vLineAddr, idx, true, curCycle, pc);
-  }
+  virtual inline uint64_t load(Address vAddr, uint64_t curCycle,
+                               uint64_t dispatchCycle, Address pc,
+                               OOOCoreRecorder* cRec, uint8_t size) override;
 
+  virtual inline uint64_t store(Address vAddr, uint64_t curCycle,
+                                uint64_t dispatchCycle, Address pc,
+                                OOOCoreRecorder* cRec, uint8_t size) override;
   bool isPresent(Address lineAddr) override;
-  uint64_t replace(Address vLineAddr, uint32_t idx, bool isLoad,
-                   uint64_t curCycle, Address pc) override {
-    return 1;
+  uint64_t replace(Address vAddr, uint32_t idx, bool isLoad, uint64_t curCycle,
+                   Address pc, uint8_t size) {
+    Address vLineAddr = vAddr >> lineBits;
+    Address pLineAddr = procMask | vLineAddr;
+    MESIState dummy = MESIState::I;
+
+    futex_lock(&filterLock);
+    MemReq req = {pc,          pLineAddr, isLoad ? GETS : GETX,
+                  0,           &dummy,    curCycle,
+                  &filterLock, dummy,     srcId,
+                  reqFlags,    0,         vAddr,
+                  size};
+    uint64_t respCycle = access(req);
+    futex_unlock(&filterLock);
+    return respCycle;
   };
 
   uint64_t access(MemReq& req) override;

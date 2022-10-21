@@ -29,6 +29,8 @@
 #define FULLMISS -1
 #define OUTOFRANGEMISS -2
 
+#include <algorithm>
+
 #include "g_std/g_multimap.h"
 #include "g_std/g_unordered_map.h"
 #include "memory_hierarchy.h"
@@ -54,6 +56,7 @@ struct AddrCycleVcl : public AddrCycle {
   bool prefetch;
   uint64_t pc;
   uint64_t accessMask;
+  uint8_t fifoCtr;
 };
 
 /* General interface of a cache array. The array is a fixed-size associative
@@ -159,6 +162,7 @@ class VCLCacheArray : public SetAssocArray {
   uint32_t numLines;
   uint32_t numSets;
   std::vector<uint8_t> waySizes;
+  std::vector<uint8_t> bufferWays;
   uint32_t assoc;
   uint32_t setMask;
 
@@ -174,14 +178,21 @@ class VCLCacheArray : public SetAssocArray {
                          int32_t* prevId);
   virtual uint32_t preinsert(const Address lineAddr, const MemReq* req,
                              Address* wbLineAddr) override;
-  virtual uint32_t preinsert(const Address lineAddr, const MemReq* req,
-                             Address* wbLineAddr,
-                             int32_t prevIndex); /*no-override*/
+  virtual std::vector<std::tuple<uint32_t, Address, uint8_t, uint8_t>>
+  preinsert(const Address lineAddr, const MemReq* req, Address* wbLineAddr,
+            int32_t prevIndex); /*no-override*/
 
   virtual void postinsert(const Address lineAddr, const MemReq* req,
                           uint32_t lineId, uint64_t respCycle) override;
 
   virtual void initStats(AggregateStat* parent) override;
+
+  virtual void setBufferWays(std::vector<uint8_t> wayIndexes) {
+    assert(wayIndexes.size() <= waySizes.size());
+    std::sort(wayIndexes.begin(), wayIndexes.end());
+    assert(wayIndexes.back() < waySizes.size());
+    bufferWays = wayIndexes;
+  };
 };
 
 /* The cache array that started this simulator :) */

@@ -11,6 +11,7 @@ traceSrcs = [
     "access_tracing.cpp",
     "cache.cpp",
     "cache_arrays.cpp",
+    "cacheline_access_bitmask_helpers.cpp",
     "cache_prefetcher.cpp",
     "coherence_ctrls.cpp",
     "contention_sim.cpp",

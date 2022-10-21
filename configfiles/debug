@@ -55,6 +55,9 @@ sys = {
                     64,
                     64
                 ];
+                bufferWays = [
+                    7 # This is the index of the buffer way in the sorted waySizes list (small ... big)
+                ];
             };
             repl :
             {

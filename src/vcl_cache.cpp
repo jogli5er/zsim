@@ -15,9 +15,11 @@ bool VCLCache::isPresent(Address lineAddr) {
 inline uint64_t VCLCache::store(Address vAddr, uint64_t curCycle,
                                 uint64_t dispatchCycle, Address pc,
                                 OOOCoreRecorder* cRec, uint8_t size) {
-  uint64_t respCycle = FilterCache::store(vAddr, dispatchCycle, pc, size);
-  cRec->record(curCycle, dispatchCycle, respCycle);
+  Address vLineAddr = vAddr >> lineBits;
+  uint32_t idx = vLineAddr & setMask;
+  uint64_t respCycle = replace(vAddr, idx, false, curCycle, pc, size);
 
+  cRec->record(curCycle, dispatchCycle, respCycle);
   executePrefetch(curCycle, dispatchCycle, 0, cRec);
 
   if (zeroLatencyCache) {
@@ -54,7 +56,8 @@ inline uint64_t VCLCache::load(Address vAddr, uint64_t curCycle,
                                uint64_t dispatchCycle, Address pc,
                                OOOCoreRecorder* cRec, uint8_t size) {
   Address vLineAddr = vAddr >> lineBits;
-  uint64_t respCycle = this->load(vAddr, dispatchCycle, pc);
+  uint32_t idx = vLineAddr & setMask;
+  uint64_t respCycle = replace(vAddr, idx, true, curCycle, pc, size);
   cRec->record(curCycle, dispatchCycle, respCycle);
   executePrefetch(curCycle, dispatchCycle, 0, cRec);
 
@@ -107,6 +110,14 @@ uint64_t VCLCache::access(MemReq& req) {
           ((VCLCacheArray*)array)->preinsert(req.lineAddr, &req, &wbLineAddr);
       ZSIM_TRACE(VCLCache, "[%s] Evicting 0x%lx", name.c_str(), wbLineAddr);
 
+      auto evictionCandidates =
+          ((VCLCacheArray*)array)
+              ->preinsert(req.lineAddr, &req, &wbLineAddr, lineId);
+
+      for (const auto candidate : evictionCandidates) {
+        cc->processEviction(req, std::get<1>(candidate), std::get<0>(candidate),
+                            respCycle);
+      }
       cc->processEviction(req, wbLineAddr, lineId, respCycle);
 
       needPostInsert = true;
@@ -114,9 +125,16 @@ uint64_t VCLCache::access(MemReq& req) {
 
     if (lineId == OUTOFRANGEMISS && cc->shouldAllocate(req)) {
       Address wbLineAddr;
-      lineId = ((VCLCacheArray*)array)
-                   ->preinsert(req.lineAddr, &req, &wbLineAddr, prevId);
-      // No eviction here - we will reinsert the wbLineAddr into a smaller way
+      auto evictionCandidates =
+          ((VCLCacheArray*)array)
+              ->preinsert(req.lineAddr, &req, &wbLineAddr, prevId);
+
+      for (const auto candidate : evictionCandidates) {
+        cc->processEviction(req, std::get<1>(candidate), std::get<0>(candidate),
+                            respCycle);
+      }
+      needPostInsert = true;
+      // Might yield multiple evictions
     }
 
 #ifndef EXTERNAL_CACHE_MODEL

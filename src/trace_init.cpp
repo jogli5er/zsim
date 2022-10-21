@@ -112,8 +112,15 @@ BaseCache* BuildCacheBank(Config& config, const string& prefix, g_string& name,
   // TODO: change for vcl if needed
   uint32_t numHashes = 1;
   uint32_t ways = config.get<uint32_t>(prefix + "array.ways", 4);
-  const std::vector<uint8_t>& waySizes =
-      config.getArray<uint8_t>((prefix + "array.waySizes").c_str());
+  std::vector<uint8_t> waySizes = std::vector<uint8_t>(
+      config.getArray<uint8_t>((prefix + "array.waySizes").c_str()));
+  std::sort(waySizes.begin(), waySizes.end());
+  std::vector<uint8_t> bufferWays = std::vector<uint8_t>(
+      config.getArray<uint8_t>((prefix + "array.bufferWays").c_str()));
+  if (bufferWays.size() == 0) {
+    uint8_t buffIdx = waySizes.size() - 1;
+    bufferWays.push_back(buffIdx);  // we just select the largest way for buffer
+  }
   string arrayType = config.get<const char*>(prefix + "array.type", "SetAssoc");
   uint32_t candidates =
       (arrayType == "Z") ? config.get<uint32_t>(prefix + "array.candidates", 16)
@@ -173,10 +180,13 @@ BaseCache* BuildCacheBank(Config& config, const string& prefix, g_string& name,
 
   if (replType == "LRU" || replType == "LRUNoSh") {
     bool sharersAware = (replType == "LRU") && !isTerminal;
-    if (sharersAware) {
-      rp = new LRUReplPolicy<true>(numLines);
+    if (arrayType != "VCL") {
+      rp = sharersAware ? (ReplPolicy*)new LRUReplPolicy<true>(numLines)
+                        : (ReplPolicy*)new LRUReplPolicy<false>(numLines);
     } else {
-      rp = new LRUReplPolicy<false>(numLines);
+      rp = sharersAware
+               ? (ReplPolicy*)new VCLLRUReplPolicy<true>(numLines, waySizes)
+               : (ReplPolicy*)new VCLLRUReplPolicy<false>(numLines, waySizes);
     }
   } else if (replType == "LFU") {
     rp = new LFUReplPolicy(numLines);
@@ -287,6 +297,7 @@ BaseCache* BuildCacheBank(Config& config, const string& prefix, g_string& name,
     array = new IdealLRUPartArray(numLines, irp);
   } else if (arrayType == "VCL") {
     array = new VCLCacheArray(numLines, waySizes, rp, hf);
+    ((VCLCacheArray*)array)->setBufferWays(bufferWays);
   } else {
     panic("This should not happen, we already checked for it!");  // unless
                                                                   // someone
