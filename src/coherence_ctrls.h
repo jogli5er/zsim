@@ -410,6 +410,7 @@ class MESICC : public CC {
   uint64_t processEviction(const MemReq& triggerReq, Address wbLineAddr,
                            int32_t lineId, uint64_t startCycle) {
     bool lowerLevelWriteback = false;
+    // TODO: Generalize to multiple entries being affected
     uint64_t evCycle = tcc->processEviction(
         wbLineAddr, lineId, &lowerLevelWriteback, startCycle,
         triggerReq.srcId);  // 1. if needed, send invalidates/downgrades to

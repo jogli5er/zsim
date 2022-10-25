@@ -36,9 +36,10 @@
 struct BblInfo {
   uint32_t instrs;
   uint32_t bytes;
-  bool preserve;     // Whether or not to delete oooBbl after it is used
-  DynBbl oooBbl[0];  // 0 bytes, but will be 1-sized when we have an element
-                     // (and that element has variable size as well)
+  bool preserve;         // Whether or not to delete oooBbl after it is used
+  uint32_t* inst_sizes;  // Pointer to uint array with all inst sizes
+  DynBbl oooBbl[0];      // 0 bytes, but will be 1-sized when we have an element
+                         // (and that element has variable size as well)
 };
 
 struct CoreProperties {

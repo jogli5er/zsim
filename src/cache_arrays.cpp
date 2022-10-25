@@ -737,51 +737,90 @@ int32_t VCLCacheArray::lookup(const Address lineAddr, const MemReq* req,
   return -1;
 }
 
-// this is the preinsert for the buffer ways
 uint32_t VCLCacheArray::preinsert(const Address lineAddr, const MemReq* req,
                                   Address* wbLineAddr) {
+  ReplacementCandidate rc = this->preinsert(lineAddr, req);
+  *wbLineAddr = rc.writeBack;
+  return rc.arrayIdx;
+}
+
+/// @brief
+/// @param lineAddr
+/// @param req
+/// @return
+ReplacementCandidate VCLCacheArray::preinsert(const Address lineAddr,
+                                              const MemReq* req) {
   uint32_t set = hf->hash(0, lineAddr) & setMask;
   uint32_t first = set * assoc;
 
-  uint32_t candidate;
-
+  ReplacementCandidate candidate;
+  int count = 0;
   for (const auto bufferCandidate : bufferWays) {
     if (!array[first + bufferCandidate].fifoCtr--) {
-      candidate = first + bufferCandidate;
+      candidate.arrayIdx = first + bufferCandidate;
+      count++;
     }
   }
+  assert(count == 1);
 
-  *wbLineAddr = array[candidate].addr;
+  assert(candidate.arrayIdx < first + waySizes.size());
+
+  candidate.writeBack = array[candidate.arrayIdx].addr;
+  candidate.accessMask = array[candidate.arrayIdx].accessMask;
 
   return candidate;
 }
 
-/// @brief This preinsert is for cachelines that encountered an OUTOFBOUNDSMISS,
-/// due to non-const line sizes (under-/overr-run of present line)
+/// @brief This preinsert is for cachelines that have been evicted from the
+/// buffer ways and now need to be inserted into lower idxd ways
 /// @param lineAddr The line address to be inserted
 /// @param req The mem request object containing all the details
-/// @param wbLineAddr Which cacheblock will be written back to llc
 /// @param prevIndex The index of the previous place in the cache array. Might
 /// be used to initialize content. (could also be done depending on the
 /// replacement policies metadata)
 /// tuple: idx, wbAddr, start, end (start and end are of new block)
 /// @return The index of the new insert location
-std::vector<std::tuple<uint32_t, Address, uint8_t, uint8_t>>
-VCLCacheArray::preinsert(const Address lineAddr, const MemReq* req,
-                         Address* wbLineAddr, int32_t prevIndex) {
-  std::vector<std::pair<uint8_t, uint8_t>> consecutiveBlocks =
+std::vector<ReplacementCandidate> VCLCacheArray::preinsert(
+    const Address lineAddr, const MemReq* req, int32_t prevIndex) {
+  std::vector<BasicBlockOffsets> consecutiveBlocks =
       get_start_end_of_bitmask(array[prevIndex].accessMask);
+  std::vector<ReplacementCandidate> candidates;
+  if (consecutiveBlocks.size() == 0) {
+    // No access recorded - no need to insert
+    return candidates;
+  }
+
+  // sort from large to small to make sure we do not occupy large ways with
+  // small blocks. Additionally, we need to do two things:
+  // a) check that if we insert into larger block, the other blocks are not
+  // already covered in full
+  // b) that we do not double select a way
+  std::sort(consecutiveBlocks.begin(), consecutiveBlocks.end(),
+            [](BasicBlockOffsets a, BasicBlockOffsets b) {
+              return (a.second - a.first > b.second - b.first);
+            });
   uint32_t first = prevIndex - (prevIndex % waySizes.size());
   uint8_t maxWay = waySizes.size() - bufferWays.size();
-  std::vector<std::tuple<uint32_t, Address, uint8_t, uint8_t>> candidates;
   for (const auto block : consecutiveBlocks) {  // mostly 1 block
-    int size = block.second - block.first + 1;
-    uint32_t lineId =
-        ((VCLLRUReplPolicy<true>*)rp)
-            ->rank(req, SetAssocCands(first, first + waySizes.size() - 1), size,
-                   maxWay);
-    std::tuple<uint32_t, Address, uint8_t, uint8_t> entry(
-        lineId, array[lineId].addr, block.first, block.second);
+    uint8_t size = block.second - block.first + 1;
+    uint32_t lineId = ((VCLLRUReplPolicy<true>*)rp)
+                          ->rank(req,
+                                 SetAssocCands(first, first + waySizes.size() -
+                                                          bufferWays.size()),
+                                 size, maxWay);
+    size = std::max(waySizes[lineId % waySizes.size()], size);
+
+    uint8_t start = block.first;
+
+    if (start + size > 64) {
+      start = 64 - size;  // Note: largest idx = 63, but start + size points to
+                          // start of next block
+    }
+
+    uint8_t end = start + size - 1;  // idx to last byte
+
+    ReplacementCandidate entry(lineId, array[lineId].addr, start, end);
+    entry.accessMask = array[lineId].accessMask;
     candidates.push_back(entry);
   }
   return candidates;

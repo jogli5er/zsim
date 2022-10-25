@@ -5,6 +5,7 @@
 #define OUTOFRANGEMISS -2
 
 #include "bithacks.h"
+#include "cache_arrays.h"
 #include "galloc.h"
 #include "ooo_core_recorder.h"
 #include "ooo_filter_cache.h"

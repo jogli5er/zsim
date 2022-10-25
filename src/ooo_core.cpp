@@ -534,6 +534,21 @@ inline void OOOCore::bbl(Address bblAddr, BblInfo* bblInfo) {
     //         lastCommitCycle-decodeCycle, lastCommitCycle-curCycle);
     Address wrongPathAddr = branchTaken ? branchNotTakenNpc : branchTakenNpc;
     uint64_t reqCycle = fetchCycle;
+    // uint32_t fetchedBytes = 0;
+    // uint32_t size = branchTaken ? bblInfo->bytes: ;
+    // while (fetchedBytes < 5 * 64) {
+    //   uint64_t fetchLat =
+    //       l1i->load(wrongPathAddr, curCycle, curCycle, 0, &cRec, size) -
+    //       curCycle;
+    //   uint64_t respCycle = reqCycle + fetchLat;
+    //
+    //  bool next_taken = branchPred->predict(wrongPathAddr);
+    //  if (respCycle > lastCommitCycle) {
+    //    break;
+    //  }
+    //
+    //  reqCycle = respCycle + size / FETCH_BYTES_PER_CYCLE;
+    //}
     for (uint32_t i = 0; i < 5 * 64 / lineSize; i++) {
       uint64_t fetchLat = l1i->load(wrongPathAddr + lineSize * i, curCycle,
                                     curCycle, 0 /*no PC*/, &cRec, lineSize) -

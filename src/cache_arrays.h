@@ -59,6 +59,32 @@ struct AddrCycleVcl : public AddrCycle {
   uint8_t fifoCtr;
 };
 
+struct ReplacementCandidate {
+  uint32_t arrayIdx;
+  Address writeBack;
+  uint8_t startOffset;
+  uint8_t endOffset;
+  uint64_t accessMask;
+
+ public:
+  /// @brief Create a replacement candidate struct
+  /// @param idx The index into the cache array that this entry had at the time
+  /// this struct has been created.
+  /// @param wb The address of the block stored and which we would need to write
+  /// back in case of an eviction.
+  /// @param start Where the newly to be inserted block starts (for anything
+  /// except VCL this will always be 0)
+  /// @param end Where the newly to be inserted block ends (for anything except
+  /// VCL this will always be 63)
+  ReplacementCandidate(uint32_t idx, Address wb, uint8_t start, uint8_t end)
+      : arrayIdx(idx), writeBack(wb), startOffset(start), endOffset(end) {
+    assert(start < end);
+    assert(start > 0);
+    assert(end < 64);
+  };
+  ReplacementCandidate() : startOffset(0), endOffset(63){};
+};
+
 /* General interface of a cache array. The array is a fixed-size associative
  * container that translates addresses to line IDs. A line ID represents the
  * position of the tag. The other cache components store tag data in
@@ -178,9 +204,11 @@ class VCLCacheArray : public SetAssocArray {
                          int32_t* prevId);
   virtual uint32_t preinsert(const Address lineAddr, const MemReq* req,
                              Address* wbLineAddr) override;
-  virtual std::vector<std::tuple<uint32_t, Address, uint8_t, uint8_t>>
-  preinsert(const Address lineAddr, const MemReq* req, Address* wbLineAddr,
-            int32_t prevIndex); /*no-override*/
+  virtual ReplacementCandidate preinsert(const Address lineAddr,
+                                         const MemReq* req);
+  std::vector<ReplacementCandidate> preinsert(
+      const Address lineAddr, const MemReq* req,
+      int32_t prevIndex); /*no-override*/
 
   virtual void postinsert(const Address lineAddr, const MemReq* req,
                           uint32_t lineId, uint64_t respCycle) override;

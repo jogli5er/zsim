@@ -81,7 +81,7 @@ class BranchPredictorPAg {
   }
 
   // Predicts and updates; returns false if mispredicted
-  inline bool predict(Address branchPc, bool taken) {
+  inline bool predict(Address branchPc, bool taken, bool update = true) {
     uint32_t bhsrMask = (1 << NB) - 1;
     uint32_t histMask = (1 << HB) - 1;
     uint32_t phtMask = (1 << LB) - 1;
@@ -104,6 +104,10 @@ class BranchPredictorPAg {
     // phtIdx = (bhsr[bhsrIdx] ^ ((uint32_t)branchPc)) & phtMask;
 
     bool pred = pht[phtIdx] > 1;
+
+    if (!update) {
+      return pred;
+    }
 
     // info("BP Pred: 0x%lx bshr[%d]=%x taken=%d pht=%d pred=%d", branchPc,
     // bhsrIdx, phtIdx, taken, pht[phtIdx], pred);

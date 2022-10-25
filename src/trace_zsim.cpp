@@ -311,6 +311,7 @@ void *simtrace(void *arg) {
        * potentially for other reasons which is why we cannot cache basic blocks
        * and need to decode and simulate each instruction individually */
       bool cache_bbl = (ti->type != "MEMTRACE") && (ti->type != "PT");
+      std::vector<uint32_t> *instSizes = new std::vector<uint32_t>();
 
       while (1) {
         bbl.push_back(*insi);
@@ -341,7 +342,9 @@ void *simtrace(void *arg) {
         /* End the current BBL */
         if (likely(insi->custom_op == CustomOp::NONE)) {
           // NOTE: Assuming custom ops are 0-sized and not branches
-          bbl_size += INS_Size(insi->ins);
+          auto size = INS_Size(insi->ins);
+          bbl_size += size;
+          instSizes->push_back(size);
           if (INS_ChangeControlFlow(insi->ins)) {
             insi = reader->nextInstruction();
             sim_inst++;
@@ -362,6 +365,7 @@ void *simtrace(void *arg) {
 
       bbl_cache_entry ce(Decoder::decodeBbl(&bbl, zinfo->oooDecode), bbl_size,
                          nr_inst, mem_ops);
+      ce.bbl->inst_sizes = &((*instSizes)[0]);
       ce.bbl->preserve = cache_bbl;
       if (cache_bbl) {
         bbl_cache.insert(std::pair<uint64_t, bbl_cache_entry>(bbl_pc, ce));
@@ -388,6 +392,11 @@ void *simtrace(void *arg) {
                                  xed_decoded_inst_get_category(it->ins));
           }
         }
+      }
+
+      if (!cache_bbl) {
+        // free instr sizes?
+        delete (instSizes);
       }
     } else {  // Bbl is cached
       uint32_t size_bytes = bbl_to_sim->second.size_bytes;

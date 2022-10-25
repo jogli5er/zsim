@@ -104,33 +104,41 @@ uint64_t VCLCache::access(MemReq& req) {
 
     bool needPostInsert = false;
 
+    std::vector<ReplacementCandidate> cacheEvictionCandidates;
+    ReplacementCandidate bufferEvictionCandidate;
+
     if (lineId == FULLMISS && cc->shouldAllocate(req)) {
-      Address wbLineAddr;
-      lineId =
-          ((VCLCacheArray*)array)->preinsert(req.lineAddr, &req, &wbLineAddr);
-      ZSIM_TRACE(VCLCache, "[%s] Evicting 0x%lx", name.c_str(), wbLineAddr);
+      bufferEvictionCandidate =
+          ((VCLCacheArray*)array)->preinsert(req.lineAddr, &req);
+      ZSIM_TRACE(VCLCache, "[%s] Evicting 0x%lx", name.c_str(),
+                 bufferEvictionCandidate.writeBack);
 
       auto evictionCandidates =
           ((VCLCacheArray*)array)
-              ->preinsert(req.lineAddr, &req, &wbLineAddr, lineId);
+              ->preinsert(req.lineAddr, &req, bufferEvictionCandidate.arrayIdx);
 
+      // TODO: check if this is the data we need
       for (const auto candidate : evictionCandidates) {
-        cc->processEviction(req, std::get<1>(candidate), std::get<0>(candidate),
+        cc->processEviction(req, candidate.writeBack, candidate.arrayIdx,
                             respCycle);
       }
-      cc->processEviction(req, wbLineAddr, lineId, respCycle);
+      cc->processEviction(req, bufferEvictionCandidate.writeBack,
+                          bufferEvictionCandidate.arrayIdx, respCycle);
 
       needPostInsert = true;
     }
 
     if (lineId == OUTOFRANGEMISS && cc->shouldAllocate(req)) {
       Address wbLineAddr;
+      // Find which buffer line we will use
+      lineId =
+          ((VCLCacheArray*)array)->preinsert(req.lineAddr, &req, &wbLineAddr);
       auto evictionCandidates =
-          ((VCLCacheArray*)array)
-              ->preinsert(req.lineAddr, &req, &wbLineAddr, prevId);
+          ((VCLCacheArray*)array)->preinsert(req.lineAddr, &req, lineId);
 
+      // TODO: check if this is the data we need
       for (const auto candidate : evictionCandidates) {
-        cc->processEviction(req, std::get<1>(candidate), std::get<0>(candidate),
+        cc->processEviction(req, candidate.writeBack, candidate.arrayIdx,
                             respCycle);
       }
       needPostInsert = true;
