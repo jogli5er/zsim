@@ -541,117 +541,62 @@ VCLCacheArray::VCLCacheArray(uint32_t _num_lines, std::vector<uint8_t> ways,
 
 int32_t VCLCacheArray::lookup(const Address lineAddr, const MemReq* req,
                               bool updateReplacement, uint64_t* availCycle) {
-  uint32_t set = hf->hash(0, lineAddr) & setMask;
-  uint32_t first = set * assoc;
-  if (isHWPrefetch(req)) {
-    profPrefAccesses.inc();
-  }
-
-  for (uint32_t id = first; id < first + assoc; id++) {
-    if (array[id].addr == lineAddr) {
-      if (!req || req->prefetch) {
-        *availCycle = array[id].availCycle;
-        return id;
-      }
-      if (isHWPrefetch(req)) {
-        profPrefInCache.inc();
-      }
-
-      if (updateReplacement && !req->prefetch) rp->update(id, req);
-
-      // cache hit, line is in the cache
-      if (req->cycle >= array[id].availCycle) {
-        *availCycle = req->cycle;
-        if (array[id].prefetch && isDemandLoad(req)) {
-          profPrefHit.inc();
-          profPrefSavedCycles.inc(array[id].availCycle - array[id].startCycle);
-#ifdef MONITOR_MISS_PCS
-          if (MONITORED_PCS && isDemandLoad(req)) {
-            trackLoadPc(req->pc, hit_pcs, profHitPc, profHitPcNum);
-          }
-#endif
-          array[id].prefetch = false;
-        } else if (array[id].prefetch && isHWPrefetch(req)) {
-          profPrefHitPref.inc();
-        }
-      }
-      // line is in flight, compensate for potential OOO
-      else {
-        if (req->cycle < array[id].startCycle) {
-          *availCycle =
-              array[id].availCycle - (array[id].startCycle - req->cycle);
-          // In case of OOO, fix state by storing cycles of the earlier access
-          array[id].availCycle = *availCycle;
-          array[id].startCycle = req->cycle;
-          if (isDemandLoad(req)) {
-            profPrefInaccurateOOO.inc();
-          }
-        } else {
-          *availCycle = array[id].availCycle;
-        }
-        if (array[id].prefetch && isDemandLoad(req)) {
-          profPrefLateMiss.inc();
-          profPrefLateTotalCycles.inc(*availCycle - req->cycle);
-          profPrefSavedCycles.inc(req->cycle - array[id].startCycle);
-          if (isHWPrefetch(req)) {
-            profPrefHitPref.inc();
-          }
-#ifdef MONITOR_MISS_PCS
-          // Gather Load PC miss stats
-          if (MONITORED_PCS) {
-            trackLoadPc(array[id].pc, late_addr, profLatePc, profLatePcNum);
-          }
-#endif
-          array[id].prefetch = false;
-        } else if (array[id].prefetch && isHWPrefetch(req)) {
-          profPrefHitPref.inc();
-        }
-      }
-      if (isDemandLoad(req)) {
-        profHitDelayCycles.inc(*availCycle - req->cycle);
-      }
-      return id;
-    }
-  }
-  if (req && isHWPrefetch(req)) {
-    profPrefNotInCache.inc();
-  }
-
-#ifdef MONITOR_MISS_PCS
-  // Gather Load PC miss stats
-  if (MONITORED_PCS && isDemandLoad(req)) {
-    trackLoadPc(req->pc, miss_pcs, profMissPc, profMissPcNum);
-  }
-#endif
-
-  return -1;
+  int32_t id;
+  int32_t rv = this->lookup(lineAddr, req, updateReplacement, availCycle, &id);
+  return (rv < 0 ? -1 : id);
 }
 
-/// @brief Lookup entry for lineAddr, returning either Failure code or array
-/// idx. For Failure codes
-/// @param lineAddr
-/// @param req
-/// @param updateReplacement
-/// @param availCycle
-/// @param prevId
-/// @return
+std::vector<ReplacementCandidate> VCLCacheArray::getAllEntries(
+    const Address lineAddr, const MemReq* req, bool invalidateEntries) {
+  uint32_t set = hf->hash(0, lineAddr) & setMask;
+  uint32_t first = set * assoc;
+  std::vector<ReplacementCandidate> entries;
+  int32_t id = first;
+  for (; id < (int32_t)(first + assoc); ++id) {
+    auto entry = array[id];
+    if (entry.addr == lineAddr) {
+      ReplacementCandidate cand(id, lineAddr, entry.startOffset,
+                                entry.startOffset + entry.blockSize - 1);
+      entries.push_back(cand);
+      if (invalidateEntries) {
+        rp->invalidate(id, req);
+      }
+    }
+  }
+  return entries;
+}
+
+/// @brief Lookup entry for lineAddr, returning indicator code
+/// @param lineAddr line address to look up
+/// @param req request that triggered lookup
+/// @param updateReplacement Indicate if placement bits should be updated
+/// @param availCycle When the mem location will be available (fully loaded)
+/// @param resultId containing the Id if it is present - undefined otherwise
+/// (check return value)
+/// @return Indicator value: See FULLMISS/OUTOFRANGEMISS/HIT
 int32_t VCLCacheArray::lookup(const Address lineAddr, const MemReq* req,
                               bool updateReplacement, uint64_t* availCycle,
-                              int32_t* prevId) {
+                              int32_t* resultId) {
   uint32_t set = hf->hash(0, lineAddr) & setMask;
   uint32_t first = set * assoc;
   if (isHWPrefetch(req)) {
     profPrefAccesses.inc();
   }
 
-  // TODO
-  for (uint32_t id = first; id < first + assoc; id++) {
+  int32_t id = first;
+  int32_t result = FULLMISS;
+
+  Address baseAddress = lineAddr << (uint64_t)lineBits;
+  uint32_t start = req->vAddr - baseAddress;
+  uint32_t end = req->vAddr - baseAddress + req->size;
+  for (; id < (int32_t)(first + assoc); id++) {
     if (array[id].addr == lineAddr) {
       // hit - proceed as we would normally
       // todo: set access bitmask
       if (!req || req->prefetch) {
         *availCycle = array[id].availCycle;
-        return id;
+        *resultId = id;
+        return HIT;
       }
       if (isHWPrefetch(req)) {
         profPrefInCache.inc();
@@ -659,34 +604,11 @@ int32_t VCLCacheArray::lookup(const Address lineAddr, const MemReq* req,
 
       if (updateReplacement && !req->prefetch) rp->update(id, req);
 
-      // cache hit, line is in the cache
-      if (req->cycle >= array[id].availCycle &&
-          array[id].startOffset <= (req->vAddr - lineAddr) &&
-          (req->vAddr - lineAddr) <
-              array[id].startOffset + array[id].blockSize) {
-        *availCycle = req->cycle;
-        if (array[id].prefetch && isDemandLoad(req)) {
-          profPrefHit.inc();
-          profPrefSavedCycles.inc(array[id].availCycle - array[id].startCycle);
-#ifdef MONITOR_MISS_PCS
-          if (MONITORED_PCS && isDemandLoad(req)) {
-            trackLoadPc(req->pc, hit_pcs, profHitPc, profHitPcNum);
-          }
-#endif
-          array[id].prefetch = false;
-        } else if (array[id].prefetch && isHWPrefetch(req)) {
-          profPrefHitPref.inc();
-        }
-      } else if (req->cycle >= array[id].availCycle) {
-        // present, but not in range
-        // avail cycle ?
-        *prevId = id;
-        id = OUTOFRANGEMISS;
-      }
       // line is in flight, compensate for potential OOO
-      else {
+      if (req->cycle < array[id].availCycle) {
         // When in flight it will be inserted into a 64 byte way - no need to
-        // check for out of range
+        // check for out of range. In this case it is always considered a "hit"
+        // in terms of caching behaviour
         if (req->cycle < array[id].startCycle) {
           *availCycle =
               array[id].availCycle - (array[id].startCycle - req->cycle);
@@ -716,12 +638,57 @@ int32_t VCLCacheArray::lookup(const Address lineAddr, const MemReq* req,
         } else if (array[id].prefetch && isHWPrefetch(req)) {
           profPrefHitPref.inc();
         }
+        *resultId = id;
+        result = HIT;
+        break;
       }
-      if (isDemandLoad(req)) {
-        profHitDelayCycles.inc(*availCycle - req->cycle);
+
+      // cache hit, line is in the cache
+      if (array[id].startOffset <= start &&
+          end <= array[id].startOffset + array[id].blockSize) {
+        *availCycle =
+            req->cycle;  // assert: this should never change if we enter here.
+        if (array[id].prefetch && isDemandLoad(req)) {
+          profPrefHit.inc();
+          profPrefSavedCycles.inc(array[id].availCycle - array[id].startCycle);
+#ifdef MONITOR_MISS_PCS
+          if (MONITORED_PCS && isDemandLoad(req)) {
+            trackLoadPc(req->pc, hit_pcs, profHitPc, profHitPcNum);
+          }
+#endif
+          array[id].prefetch = false;
+        } else if (array[id].prefetch && isHWPrefetch(req)) {
+          profPrefHitPref.inc();
+        }
+        array[id].accessMask = set_accessed(array[id].accessMask, start, end);
+        *resultId = id;
+        result = HIT;
+        break;
+      } else if (array[id].startOffset <= start &&
+                 start < array[id].startOffset + array[id].blockSize) {
+        array[id].accessMask =
+            set_accessed(array[id].accessMask, start,
+                         array[id].startOffset + array[id].blockSize);
+        start = array[id].startOffset + array[id].blockSize;
+        *resultId = id;
+        result = OUTOFRANGEMISS;  // might change if we finally cover the whole
+                                  // thing
+        continue;                 // we do not completely cover the lookup blck
+      } else if (array[id].startOffset < end &&
+                 end <= array[id].startOffset + array[id].blockSize) {
+        array[id].accessMask =
+            set_accessed(array[id].accessMask, array[id].startOffset, end);
+        end = array[id].startOffset;
+        *resultId = id;
+        result = OUTOFRANGEMISS;  // might change if we finally cover the whole
+                                  // thing
+        continue;                 // we do not completely cover the lookup blck
       }
-      return id;
     }
+  }
+
+  if (isDemandLoad(req)) {
+    profHitDelayCycles.inc(*availCycle - req->cycle);
   }
   if (req && isHWPrefetch(req)) {
     profPrefNotInCache.inc();
@@ -734,7 +701,7 @@ int32_t VCLCacheArray::lookup(const Address lineAddr, const MemReq* req,
   }
 #endif
 
-  return -1;
+  return result;
 }
 
 uint32_t VCLCacheArray::preinsert(const Address lineAddr, const MemReq* req,
@@ -744,7 +711,7 @@ uint32_t VCLCacheArray::preinsert(const Address lineAddr, const MemReq* req,
   return rc.arrayIdx;
 }
 
-/// @brief
+/// @brief Buffer preinsert
 /// @param lineAddr
 /// @param req
 /// @return
@@ -755,8 +722,20 @@ ReplacementCandidate VCLCacheArray::preinsert(const Address lineAddr,
 
   ReplacementCandidate candidate;
   int count = 0;
+  assert_msg(bufferWays.size() > 0,
+             "VCLArray not initialized: call to setBufferWays before using "
+             "VCLCacheArray");
   for (const auto bufferCandidate : bufferWays) {
-    if (!array[first + bufferCandidate].fifoCtr--) {
+    if (!rp->cc->isValid(first + bufferCandidate) && count < 1) {
+      candidate.arrayIdx = first + bufferCandidate;
+      count++;
+    }
+  }
+
+  for (size_t i = 0; i < bufferWays.size(); ++i) {
+    const auto bufferCandidate = bufferWays[i];
+    uint8_t ctr = --array[first + bufferCandidate].fifoCtr;
+    if (ctr == 0 && count < 1) {
       candidate.arrayIdx = first + bufferCandidate;
       count++;
     }
@@ -790,6 +769,11 @@ std::vector<ReplacementCandidate> VCLCacheArray::preinsert(
     return candidates;
   }
 
+  // If we saw more split ups, we need to figure out sth else (e.g. max 2
+  // blocks, ow. combine to max 2 blocks, first gap, largest gap or similar)
+  // Max num blocks we saw so far: 5
+  assert(consecutiveBlocks.size() < waySizes.size() - bufferWays.size());
+
   // sort from large to small to make sure we do not occupy large ways with
   // small blocks. Additionally, we need to do two things:
   // a) check that if we insert into larger block, the other blocks are not
@@ -800,6 +784,9 @@ std::vector<ReplacementCandidate> VCLCacheArray::preinsert(
               return (a.second - a.first > b.second - b.first);
             });
   uint32_t first = prevIndex - (prevIndex % waySizes.size());
+  assert_msg(bufferWays.size() > 0,
+             "VCLArray not initialized: call to setBufferWays before using "
+             "VCLCacheArray");
   uint8_t maxWay = waySizes.size() - bufferWays.size();
   for (const auto block : consecutiveBlocks) {  // mostly 1 block
     uint8_t size = block.second - block.first + 1;
@@ -824,6 +811,88 @@ std::vector<ReplacementCandidate> VCLCacheArray::preinsert(
     candidates.push_back(entry);
   }
   return candidates;
+}
+
+/// @brief Insert into buffer way at position lineId
+/// @param lineAddr address of the newly inserted block
+/// @param req The memory request triggering this insert
+/// @param lineId The target line where to insert he line
+/// @param previousEntries Previous contents (e.g. previous masks)
+/// @param respCycle To set from when on an entry becomes available
+void VCLCacheArray::postinsert(
+    const Address lineAddr, const MemReq* req, uint32_t lineId,
+    std::vector<ReplacementCandidate> previousEntries, uint64_t respCycle) {
+  uint64_t mask = 0;
+  for (const auto prevEntry : previousEntries) {
+    mask |= prevEntry.accessMask;
+  }
+  array[lineId].accessMask =
+      mask;  // we do not start from zero, we keep what has been accessed
+             // before. probably we need a double counter to be less stable?
+  rp->replaced(lineId);
+  if (isHWPrefetch(req)) {
+    profPrefPostInsert.inc();
+  }
+  if (array[lineId].prefetch) {
+    profPrefEarlyMiss.inc();
+    if (isHWPrefetch(req)) {
+      profPrefReplacePref.inc();
+    }
+
+#ifdef MONITOR_MISS_PCS
+    // Gather Load PC miss stats
+    if (MONITORED_PCS) {
+      trackLoadPc(array[lineId].pc, early_addr, profEarlyPc, profEarlyPcNum);
+    }
+#endif
+  }
+
+  array[lineId].prefetch = isHWPrefetch(req);
+  array[lineId].addr = lineAddr;
+  array[lineId].availCycle = respCycle;
+  array[lineId].startCycle = req->cycle;
+  array[lineId].pc = req->pc;
+  array[lineId].fifoCtr = bufferWays.size();
+  rp->update(lineId, req);
+}
+
+/// @brief Insert into the set associative cache part from buffer
+/// @param lineAddr address of the inserted 64B block
+/// @param req The memory request triggering this insert
+/// @param targets Where and which blocks to insert
+/// @param respCycle To set from when on an entry becomes available
+void VCLCacheArray::postinsert(const Address lineAddr, const MemReq* req,
+                               std::vector<ReplacementCandidate> targets,
+                               uint64_t respCycle) {
+  for (const auto target : targets) {
+    rp->replaced(target.arrayIdx);
+    if (isHWPrefetch(req)) {
+      profPrefPostInsert.inc();
+    }
+    if (array[target.arrayIdx].prefetch) {
+      profPrefEarlyMiss.inc();
+      if (isHWPrefetch(req)) {
+        profPrefReplacePref.inc();
+      }
+
+#ifdef MONITOR_MISS_PCS
+      // Gather Load PC miss stats
+      if (MONITORED_PCS) {
+        trackLoadPc(array[lineId].pc, early_addr, profEarlyPc, profEarlyPcNum);
+      }
+#endif
+    }
+
+    array[target.arrayIdx].prefetch = isHWPrefetch(req);
+    array[target.arrayIdx].addr = lineAddr;
+    array[target.arrayIdx].availCycle = respCycle;
+    array[target.arrayIdx].startCycle = req->cycle;
+    array[target.arrayIdx].pc = req->pc;
+    array[target.arrayIdx].startOffset = target.startOffset;
+    assert(target.endOffset - target.startOffset ==
+           array[target.arrayIdx].blockSize - 1);
+    rp->update(target.arrayIdx, req);
+  }
 }
 
 void VCLCacheArray::postinsert(const Address lineAddr, const MemReq* req,

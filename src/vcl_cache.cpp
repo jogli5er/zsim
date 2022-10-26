@@ -91,12 +91,12 @@ uint64_t VCLCache::access(MemReq& req) {
   if (likely(!skipAccess)) {
     bool updateReplacement = (req.type == GETS) || (req.type == GETX);
     uint64_t availCycle;
-    int32_t prevId;
-    int32_t lineId = ((VCLCacheArray*)array)
-                         ->lookup(req.lineAddr, &req, updateReplacement,
-                                  &availCycle, &prevId);
+    int32_t lineId;
+    int32_t hitResult = ((VCLCacheArray*)array)
+                            ->lookup(req.lineAddr, &req, updateReplacement,
+                                     &availCycle, &lineId);
     // VCL Array can return multiple error codes
-    if (lineId > FULLMISS && cc->isValid(lineId)) {
+    if (hitResult == HIT && cc->isValid(lineId)) {
       respCycle = (availCycle > respCycle) ? availCycle : respCycle + accLat;
     } else {
       respCycle += accLat;
@@ -104,40 +104,42 @@ uint64_t VCLCache::access(MemReq& req) {
 
     bool needPostInsert = false;
 
+    std::vector<ReplacementCandidate>
+        bufferMoveCandidates;  // Move to buffer because of partial miss
     std::vector<ReplacementCandidate> cacheEvictionCandidates;
     ReplacementCandidate bufferEvictionCandidate;
 
-    if (lineId == FULLMISS && cc->shouldAllocate(req)) {
+    if (hitResult == FULLMISS && cc->shouldAllocate(req)) {
       bufferEvictionCandidate =
           ((VCLCacheArray*)array)->preinsert(req.lineAddr, &req);
       ZSIM_TRACE(VCLCache, "[%s] Evicting 0x%lx", name.c_str(),
                  bufferEvictionCandidate.writeBack);
 
-      auto evictionCandidates =
+      cacheEvictionCandidates =
           ((VCLCacheArray*)array)
               ->preinsert(req.lineAddr, &req, bufferEvictionCandidate.arrayIdx);
 
       // TODO: check if this is the data we need
-      for (const auto candidate : evictionCandidates) {
+      for (const auto candidate : cacheEvictionCandidates) {
         cc->processEviction(req, candidate.writeBack, candidate.arrayIdx,
                             respCycle);
       }
-      cc->processEviction(req, bufferEvictionCandidate.writeBack,
-                          bufferEvictionCandidate.arrayIdx, respCycle);
 
       needPostInsert = true;
     }
 
-    if (lineId == OUTOFRANGEMISS && cc->shouldAllocate(req)) {
-      Address wbLineAddr;
+    if (hitResult == OUTOFRANGEMISS && cc->shouldAllocate(req)) {
       // Find which buffer line we will use
-      lineId =
-          ((VCLCacheArray*)array)->preinsert(req.lineAddr, &req, &wbLineAddr);
-      auto evictionCandidates =
-          ((VCLCacheArray*)array)->preinsert(req.lineAddr, &req, lineId);
+      bufferMoveCandidates =
+          ((VCLCacheArray*)array)->getAllEntries(req.lineAddr, &req);
+      bufferEvictionCandidate =
+          ((VCLCacheArray*)array)->preinsert(req.lineAddr, &req);
+      cacheEvictionCandidates =
+          ((VCLCacheArray*)array)
+              ->preinsert(req.lineAddr, &req, bufferEvictionCandidate.arrayIdx);
 
       // TODO: check if this is the data we need
-      for (const auto candidate : evictionCandidates) {
+      for (const auto candidate : cacheEvictionCandidates) {
         cc->processEviction(req, candidate.writeBack, candidate.arrayIdx,
                             respCycle);
       }
@@ -154,11 +156,24 @@ uint64_t VCLCache::access(MemReq& req) {
     }
 #endif
 
-    respCycle = cc->processAccess(req, lineId, respCycle);
     if (needPostInsert) {
+      // buffer insert
       ((VCLCacheArray*)array)
-          ->postinsert(req.lineAddr, &req, lineId, respCycle);
+          ->postinsert(req.lineAddr, &req, bufferEvictionCandidate.arrayIdx,
+                       bufferMoveCandidates, respCycle);
+
+      // cache insert
+      ((VCLCacheArray*)array)
+          ->postinsert(bufferEvictionCandidate.arrayIdx, &req,
+                       cacheEvictionCandidates, respCycle);
+      // ((VCLCacheArray*)array)
+      //     ->postinsert(req.lineAddr, &req, prevId, respCycle);
     }
+
+    // should we really access before postInsert?
+    respCycle =
+        cc->processAccess(req, bufferEvictionCandidate.arrayIdx, respCycle);
+
 #ifndef EXTERNAL_CACHE_MODEL
     // Access may have generated another timing record. If *both* access
     // and wb have records, stitch them together

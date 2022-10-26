@@ -461,7 +461,7 @@ inline void OOOCore::bbl(Address bblAddr, BblInfo* bblInfo) {
 
   // Model fetch-decode delay (fixed, weak predec/IQ assumption)
   uint64_t fetchCycle = decodeCycle - (DECODE_STAGE - FETCH_STAGE);
-  uint32_t lineSize = 1 << lineBits;
+  // uint32_t lineSize = 1 << lineBits;
 #ifdef OOO_STALL_STATS
   uint64_t fetchCycleBeforeBP = fetchCycle;
 #endif
@@ -529,11 +529,13 @@ inline void OOOCore::bbl(Address bblAddr, BblInfo* bblInfo) {
      * ~3.5 bytes/instr, 1.2 uops/instr, this is about 5 64-byte lines.
      */
 
+    // common code
     // info("Mispredicted branch, %ld %ld %ld | %ld %ld", decodeCycle, curCycle,
     // lastCommitCycle,
     //         lastCommitCycle-decodeCycle, lastCommitCycle-curCycle);
-    Address wrongPathAddr = branchTaken ? branchNotTakenNpc : branchTakenNpc;
-    uint64_t reqCycle = fetchCycle;
+    // Address wrongPathAddr = branchTaken ? branchNotTakenNpc : branchTakenNpc;
+    // uint64_t reqCycle = fetchCycle;
+    // new impl
     // uint32_t fetchedBytes = 0;
     // uint32_t size = branchTaken ? bblInfo->bytes: ;
     // while (fetchedBytes < 5 * 64) {
@@ -549,17 +551,18 @@ inline void OOOCore::bbl(Address bblAddr, BblInfo* bblInfo) {
     //
     //  reqCycle = respCycle + size / FETCH_BYTES_PER_CYCLE;
     //}
-    for (uint32_t i = 0; i < 5 * 64 / lineSize; i++) {
-      uint64_t fetchLat = l1i->load(wrongPathAddr + lineSize * i, curCycle,
-                                    curCycle, 0 /*no PC*/, &cRec, lineSize) -
-                          curCycle;
-      uint64_t respCycle = reqCycle + fetchLat;
-      if (respCycle > lastCommitCycle) {
-        break;
-      }
-      // Model fetch throughput limit
-      reqCycle = respCycle + lineSize / FETCH_BYTES_PER_CYCLE;
-    }
+    // old impl
+    // for (uint32_t i = 0; i < 5 * 64 / lineSize; i++) {
+    //   uint64_t fetchLat = l1i->load(wrongPathAddr + lineSize * i, curCycle,
+    //                                 curCycle, 0 /*no PC*/, &cRec, lineSize) -
+    //                       curCycle;
+    //   uint64_t respCycle = reqCycle + fetchLat;
+    //   if (respCycle > lastCommitCycle) {
+    //     break;
+    //   }
+    //   // Model fetch throughput limit
+    //   reqCycle = respCycle + lineSize / FETCH_BYTES_PER_CYCLE;
+    // }
 
     fetchCycle = lastCommitCycle;
   }

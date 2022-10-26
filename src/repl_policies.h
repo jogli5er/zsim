@@ -45,11 +45,9 @@
  * detail.)
  */
 class ReplPolicy : public GlobAlloc {
- protected:
+ public:
   CC* cc;  // coherence controller, used to figure out whether candidates are
            // valid or number of sharers
-
- public:
   ReplPolicy() : cc(nullptr) {}
 
   virtual void setCC(CC* _cc) { cc = _cc; }
@@ -59,6 +57,16 @@ class ReplPolicy : public GlobAlloc {
 
   virtual uint32_t rankCands(const MemReq* req, SetAssocCands cands) = 0;
   virtual uint32_t rankCands(const MemReq* req, ZCands cands) = 0;
+
+  virtual void invalidate(uint32_t id, const MemReq* req) {
+    cc->startInv();
+    InvReq inv;
+    inv.cycle = req->cycle;
+    inv.lineAddr = req->lineAddr;
+    inv.srcId = 0;
+    inv.type = INV;
+    cc->processInv(inv, id, req->cycle);
+  };
 
   virtual void initStats(AggregateStat* parent) {}
 };

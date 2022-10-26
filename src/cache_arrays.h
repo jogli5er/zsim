@@ -28,8 +28,10 @@
 
 #define FULLMISS -1
 #define OUTOFRANGEMISS -2
+#define HIT -3
 
 #include <algorithm>
+#include <iostream>
 
 #include "g_std/g_multimap.h"
 #include "g_std/g_unordered_map.h"
@@ -160,6 +162,8 @@ class SetAssocArray : public CacheArray {
   Counter profPrefPostInsert;
   Counter profPrefReplacePref;
   VectorCounter profCacheLineUsed;
+  VectorCounter profBufferLineUsed;
+  VectorCounter profVCLLineUsed;
 
  public:
   SetAssocArray(uint32_t _numLines, uint32_t _assoc, ReplPolicy* _rp,
@@ -202,6 +206,8 @@ class VCLCacheArray : public SetAssocArray {
   virtual int32_t lookup(const Address lineAddr, const MemReq* req,
                          bool updateReplacement, uint64_t* availCycle,
                          int32_t* prevId);
+  virtual std::vector<ReplacementCandidate> getAllEntries(
+      const Address lineAddr, const MemReq* req, bool invalidateEntries = true);
   virtual uint32_t preinsert(const Address lineAddr, const MemReq* req,
                              Address* wbLineAddr) override;
   virtual ReplacementCandidate preinsert(const Address lineAddr,
@@ -213,6 +219,17 @@ class VCLCacheArray : public SetAssocArray {
   virtual void postinsert(const Address lineAddr, const MemReq* req,
                           uint32_t lineId, uint64_t respCycle) override;
 
+  //  range miss - reinsert into buffer way
+  virtual void postinsert(const Address lineAddr, const MemReq* req,
+                          uint32_t lineId,
+                          std::vector<ReplacementCandidate> previousEntries,
+                          uint64_t respCycle); /*no-override*/
+
+  // eviction from buffer way
+  virtual void postinsert(const Address lineAddr, const MemReq* req,
+                          std::vector<ReplacementCandidate> targets,
+                          uint64_t respCycle); /*no-override*/
+
   virtual void initStats(AggregateStat* parent) override;
 
   virtual void setBufferWays(std::vector<uint8_t> wayIndexes) {
@@ -220,6 +237,15 @@ class VCLCacheArray : public SetAssocArray {
     std::sort(wayIndexes.begin(), wayIndexes.end());
     assert(wayIndexes.back() < waySizes.size());
     bufferWays = wayIndexes;
+    // initialize buffer way entries
+    for (size_t i = 0; i < bufferWays.size(); ++i) {
+      // TODO: we might need to pass num of sets from the config for arbitrary
+      // VCL configurations
+      for (uint32_t j = 0; j < (numLines / waySizes.size()); j++) {
+        array[j * waySizes.size() + bufferWays[i]].fifoCtr =
+            i + 1;  // we evaluate ctr-1
+      }
+    }
   };
 };
 
